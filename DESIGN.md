@@ -37,28 +37,34 @@ The sun sinks while you play.
 - A ghost (a player whose house is out) uses the same keys: move drifts the ghost over the green, Throw throws a pebble.
 - Hold to wind up: power rises from 0 to 1 over 0.9 s (ease-out), then stays at 1. Releasing at any power throws. Right click
   (or sliding the aim finger off the screen) does nothing special: there is no cancel to learn.
-- `controls` in onceworlds.json: Mouse "Aim"; Hold Click/Space "Wind up, let go to throw"; W A S D "Move on your lawn"; Hold R
-  "Repair your glass"; Esc "Free the mouse".
+- Pointer lock is asked for only from a click in the game. When it is refused (or on a browser without it), dragging with the
+  mouse aims instead, and a small "Click" plate sits top right until a lock holds.
+- `controls` in onceworlds.json (9 lines): Mouse "Aim"; Hold click or Space "Wind up, let go to throw"; W A S D "Move on your
+  lawn"; Hold R "Repair your glass"; Esc "Free the mouse"; and the touch versions: Drag "Aim", Hold Throw, Stick "Move", Hold
+  Repair.
 
-## The first 60 seconds
+## The first minute
+
+What it resembles: an artillery game (arcs and wind) played in first person, from your own lawn. What is its own: your health is
+the glass house behind you, every house's health is its house number, and you choose between throwing and re-glazing.
 
 | Time | Screen | Words |
 |---|---|---|
-| 0 s | **Title.** The cul-de-sac alive: a slow crane shot round the green while six bot neighbours play a real round. Panes burst into glittering shards, house numbers tick down. "Glass Houses" in big mounted letters top-left of centre, one big **Play** door bottom-centre. | none |
-| ~2 s | Play (tap, click, Space or Enter) starts the AudioContext. The camera glides down to **the lobby**: a high view of the street, every lawn with a real-estate sign (avatar and name, or the bot neighbour who lives there). Your house's porch light and sign are marked with an arrow and your colour. | none |
-| ~4 s | Alone: the platform's Ready strip is at the bottom; the Street plate shows Palm Court. One tap on Ready. With others: everyone readies (public), or the host starts (private). | the platform's "Ready" |
-| ~5 s | **Our own 3-2-1** (`ownCountdown: true`): big house numerals drop onto your mailbox one by one while the camera flies down into first person on your lawn. | "3", "2", "1" |
-| 8 s | **Round 1.** First person, a stone in your hand, the green ahead, five houses across with "20" on each wall. | "Break their glass" (2 s) |
-| 10 s | Hold: the dotted arc grows from your hand and lands on what you aim at. | "Hold to wind up" until the first hold; then "Let go to throw" while holding, once |
-| 11 s | First throw: whoosh, the stone arcs, a pane bursts, the house number flips 20 to 19. | none |
-| ~16 s | A stone whooshes past your head (bots hold off your house for the first 6 s of a first-ever round). | none |
-| ~20 s | Behind you: a crash. A shard flash on the bottom edge of the screen, your plate drops 20 to 19, an arrow at the screen edge points at who threw it, their plate blinks. | "Keep yours" (1.5 s) |
-| ~30 s | Your third pane gone. | "Hold R to repair" (touch: "Hold Repair"), once |
-| ~35 s | A brick thuds onto the lawn line between you and a neighbour. | "Grab it!" over the brick, once |
-| 40-60 s | A gnome screams across the green, someone gets bonked, the first house falls into a cascade of shards and goes dark. | "Brick: breaks 3" the first time you hold one |
+| 0 s | **Title.** The street alive: a slow crane shot round the green while six bot neighbours play a real round; when a house falls the camera cuts to it. "Glass Houses" in two lines of big mounted letters top left, one tangerine **Play** door with a brass knob bottom centre. The platform's Ready strip is hidden here (`room.hideLobby(true)`). | none |
+| ~2 s | Play (click, tap, Space or Enter) starts the sound. **The lobby:** the camera sits behind and above your house, looking over your lawn at the green. Every lawn has a real-estate sign with a name (yours with a big arrow and your colour). At the top: the street plate (alone: the ladder of eight street blades, padlocks on the locked ones) and the Rounds plates (1, 3, 5). | none |
+| ~4 s | The platform's Ready bar at the bottom. One tap. With others: everyone readies (public), or the host starts (private). If a match starts while you're still on the title, the game leaves the title by itself. | the platform's "Ready" |
+| ~5 s | **Our own 3-2-1** (`ownCountdown: true`): big numerals drop with a clack each while the camera comes down from above onto your lawn. | "3", "2", "1" |
+| 8 s | **Round 1.** First person, a stone in your hand, the green ahead, a number plate over every house. | "Break their glass" (your first 3 rounds) |
+| 10 s | Hold: the dotted arc grows from your hand and lands on what you aim at (a cross on a wall, a ring on the ground). | "Hold to wind up" (touch: "Hold Throw") until the first hold; then "Let go to throw", once |
+| 11 s | First throw: whoosh, the stone arcs, a pane bursts, the number over that house flips 20 to 19. | none |
+| ~16 s | A stone whooshes past your head (alone on the first two streets until you have a star there, bots leave your house alone for the first 6 s). | none |
+| ~20 s | A crash behind you: a white flash at the screen's edge, your plate drops 20 to 19, an arrow at the edge points at who threw it. | "Keep yours" (once) |
+| ~30 s | Your glass at 17 while the store is open. | "Hold R to repair" (touch: "Hold Repair"), once |
+| ~25-35 s | A brick or a gnome drops onto the line between two lawns. | "Grab it!" (once); "Brick: breaks 3" / "Gnome: breaks 2" when you pick one up |
+| 40-60 s | Panes burst all round the green; the first house falls into a cascade of shards and goes dark. | none |
 
-The first round of a match is gentler: wind at 30% of the street's range. In a player's first-ever round (`firstRound` in
-`ow.save`) no bot throws at their house for the first 6 s, and at most one bot at a time until 0:30.
+Gentle on purpose: round 1 of every match has the wind at 30%. Alone on Palm Court or Sunset Loop without a star there, no bot
+throws at your house for the first 6 s, then at most one bot at a time until 0:30, then 40% as much as at anyone else.
 
 ## The rules
 
@@ -98,10 +104,10 @@ The first round of a match is gentler: wind at 30% of the street's range. In a p
 ### Repair and the hardware store
 
 - **Hold Repair** anywhere on your lawn, standing still, not throwing: the broken (or cracked) pane nearest the middle of the
-  facade is re-glazed in 1.5 s, then the next one. Moving, throwing or a bonk stops it. A glazier's squeak while it works, a
+  facade is re-glazed in 2.5 s, then the next one. Moving, throwing or a bonk stops it. A glazier's squeak while it works, a
   ting when a pane is done; your plate counts up.
-- **At 2:00 the hardware store closes**: its neon flips from OPEN to CLOSED with a shop bell, repairs end for everyone, and the
-  wind picks up (x1.6).
+- **At 1:30 the hardware store closes**: its neon flips from OPEN to CLOSED with a shop bell, repairs end for everyone, and the
+  wind picks up (x1.6). The second half of every round is a straight fight.
 - The round ends at **3:00** at the latest. Then the house with the most glass wins (cracked counts as glass).
 
 ### Intercepts
@@ -129,6 +135,7 @@ The first round of a match is gentler: wind at 30% of the street's range. In a p
   pebbles break one. Pebbles pass through stones and players.
 - A living player's stone that hits a ghost **poofs** it back to the fountain (2 s before it can throw again).
 - Latecomers who watch a round float as ghosts too, without pebbles, with the label "Watching".
+- When the round ends the ghosts go home, so nothing floats between the camera and the winner's house.
 
 ### Winning a round, and a match
 
@@ -148,7 +155,7 @@ Every two seconds a decision: who to throw at, how hard, how high, whether to mo
 | Wind | Ignores it, sees stones drift | Reads the windsock and the leaves, aims upwind by the right amount; knows lobs drift three times more than line drives |
 | Targets | Throws at whatever is in front | Picks the leader, finishes a house on 2 panes before someone else gets the places, takes revenge on whoever is hitting them |
 | The last panes | Throws at the house and hits empty frames | Aims at the remaining panes one by one; saves a brick for a cluster of three |
-| Defence | Repairs when nearly dead and gets bonked doing it | Repairs in quiet moments, before 2:00, at the edge of the lawn where fewer lines reach; strafes when a stone is coming |
+| Defence | Repairs when nearly dead and gets bonked doing it | Repairs in quiet moments, before 1:30, at the edge of the lawn where fewer lines reach; strafes when a stone is coming |
 | Intercepts | Never | Knocks down stones aimed at their house, especially slow lobs and bricks |
 | Bonks | Never aims at people | Bonks repairers, leads strafing players, poofs a ghost that's cracking their glass |
 | Movement | Stands still | Strafes to find angles around the oak and fountain, races neighbours to specials |
@@ -166,15 +173,17 @@ neighbours who live there.
 |---|---|---|---|---|---|
 | 1 | Palm Court | Ring, facades 22 m from the oak, 60° apart | 0-1.0 | Golden hour | 0.20-0.40 |
 | 2 | Sunset Loop | Ring of 24 m; a parked convertible and palms in the centre instead of the oak | 0-1.5 | Low red sunset | 0.30-0.50 |
-| 3 | Narrow Lane | Two curved rows of three facing each other across a 15 m lane (angles ±25° around 0° and 180°): across is close, next door is edge-on | 0-1.0 | Bright late afternoon | 0.35-0.55 |
+| 3 | Little Loop | A tight ring of 16 m with a planter in the middle: every house is close, nothing to hide behind | 0-1.0 | Bright afternoon | 0.35-0.55 |
 | 4 | Cliff Top | Horseshoe on 240° of arc, the open side a cliff over the sea; gusts | 0.5-3.0 | Hazy gold | 0.40-0.60 |
-| 5 | Hillside | Amphitheatre: the far houses terraced up to 6 m higher; height helps | 0-1.5 | Golden hour | 0.50-0.70 |
+| 5 | Hillside | A ring on a slope: the houses stand 0, 1.5, 3.5, 4.5, 3.5 and 1.5 m up; height helps | 0-1.5 | Golden hour | 0.50-0.70 |
 | 6 | Porch Lights | Ring of 22 m at night: lit interiors, porch lights, glowing stone trails | 0-1.5 | Night | 0.55-0.75 |
-| 7 | Snow Day | Ring of 20 m, snow falling, icy lawns (you slide), a frozen fountain | 0.5-2.0 | Overcast white | 0.60-0.80 |
+| 7 | Snow Day | Ring of 22 m, snow falling, icy lawns (you slide), a frozen fountain | 0.5-2.0 | Overcast white | 0.60-0.80 |
 | 8 | Mesa Drive | Ring of 26 m on a mesa top, specials more often | 0.5-3.0 | Dusk | 0.75-0.95 |
 
 The wind blows from a direction that turns slowly (a full turn over 3-5 minutes) with gusts: smooth noise from the round's
 seed on the match clock, the same on every page.
+
+**Everyone moves one house along each round** of a match, so nobody keeps the best spot (on Hillside, the top terrace).
 
 ## Solo
 
@@ -187,16 +196,17 @@ neighbours** of that street. Nothing is separate: it is the same lobby, the same
 - After a solo match, the lobby comes back with the next unlocked street already picked: one tap on Ready is the next go.
 - How long it lasts: a round is 2-3 minutes; eight streets with harder neighbours and new conditions take 1-2 hours to clear
   and much longer to three-star (24 stars). Stars won on any street count, in a public server too.
-- Esc frees the mouse and shows a small card (Resume). The platform only lets a private server's host pause a match, so in a
-  private server the card also has Pause (`room.pauseMatch()`); a solo round in a public server keeps running (it is 3
-  minutes at most).
+- Esc frees the mouse and shows a small card (Resume). The platform lets a private server's host or a solo server pause a
+  match, so there the card also has Pause (`room.pauseMatch()`), and hiding the tab pauses the round when nobody else is
+  playing; a round in a public server keeps running (it is 3 minutes at most).
 
 ## Multiplayer
 
 - **A public game**, up to 6 per street: `ow.rooms.join({ maxPlayers: 6, minPlayers: 1, lobby: 'bar', ownCountdown: true,
   settings: [{ id: 'street', label: 'Street', options: 1-8 with names, default: 1 }, { id: 'rounds', label: 'Rounds', options:
   [1, 3, 5], default: 3 }] })`. Friends get private servers and invites from the platform.
-- **Lobby:** drawn by the game (the street from above, signs on the lawns), with the platform's Ready strip. Public: everyone
+- **Lobby:** drawn by the game (the street from above your house, signs on the lawns), with the platform's Ready bar
+  (`lobby: 'bar'`). Public: everyone
   readies and the room starts the countdown. Private: the host's Start. Joining never starts anything. The host picks the
   street (from the streets the host has unlocked) and the rounds on our plates (`room.setSetting`); a change clears the ready
   flags (`room.clearReady()`).
@@ -207,7 +217,7 @@ neighbours** of that street. Nothing is separate: it is the same lobby, the same
 - **Latecomers** watch as a ghost without pebbles ("Watching") and take a bot's house at the next round (`admit: 'round'`). With
   six people, they watch until the next match.
 - **Leavers** keep their seat and their points. A house whose owner is away or gone stands defenceless (its owner's figure is
-  replaced by a "Back soon" sign) and the host decides its glass. A reload is back within 15 s and carries on from presence.
+  marked "back soon" on its plate) and the host decides its glass. A reload is back within 15 s and carries on from presence.
 - **Host change:** the match record, the houses the host decides, the bots and the special are all in host state, so the next
   host carries on (`resume`).
 - **Room closes:** 'kicked' "You were removed" and Play, 'disconnected' Rejoin, 'replaced' "Playing in another tab" and Play
@@ -217,38 +227,26 @@ neighbours** of that street. Nothing is separate: it is the same lobby, the same
 
 The idea: **every page runs the same deterministic stone simulation; each house's glass is decided by one page.**
 
-- **Throws are messages:** `room.send({ k: 'throw', id, by, kind, o: [x, y, z], v: [x, y, z], t })`, where `t` is the match time
-  of the release (`room.matchNow()`, the same clock everywhere) and `kind` is stone, brick, gnome or pebble. Bots' throws come
-  from the host with `by: 'bot:N'`. About 1-2 messages a second per player.
-- **Every page simulates every stone** on the match clock in fixed steps of 1/120 s from its release tick, with the wind as a
-  function of the round seed and the tick. A throw that arrives late is fast-forwarded from its release tick, including its
-  collisions with other stones. Stone-on-stone intercepts depend only on the throws, so every page agrees on them.
-- **Who decides what:**
-  - Your own glass and your own body: **your page** (you see your own position exactly, and what you saw happen to your house
-    is what happened). Your page publishes your panes in your presence.
-  - Bots' houses and bodies, and the houses of players who are away or gone: **the host**, in host state.
-  - A ghost's poof: the ghost's own page (the host for bots' ghosts: out bots haunt the street too).
-  - The round, places, points, specials and the bots: **the host** (`createMatch`, `host:` keys).
-- **Late intercepts:** the page that decides a house keeps the last 400 ms of pane hits with the stone that made each; if a
-  throw that arrives late knocks that stone down before its hit, the pane comes back.
-- **Other pages predict:** a stone that hits a pane on any page bursts at once (juice within 100 ms); the deciding page's mask
-  arrives about 100 ms later, and a predicted break it doesn't confirm within 600 ms is put back with a glint (rare).
-- **Presence** (20 Hz, under 200 bytes): `{ x, z, yaw, pitch, pw (wind-up), st (stunned until, match ms), rp (repair progress),
-  h (special in hand), g (glass mask, 20 bits), c (cracked mask), gv (mask version), gh (ghost: 0 alive, 1 ghost), gx, gz }`.
-  Remote players are drawn with `room.presenceAt(id, { angles: ['yaw'] })`.
-- **Host state:** `host:ow.match` (the createMatch record: round data `{ street, seed, out: { [seatId]: matchMs } }`),
-  `host:houses` (`{ [seatId]: { g, c, v } }` for the houses the host decides), `host:bots` (bots' bodies and aim at 10 Hz, the
-  same fields as presence), `host:special` (`{ id, kind, x, z, at, holder }`). Grabbing a special is a `host.claim('grab')`,
-  settled by the room's clock when two neighbours reach it together.
-- **Handover:** when a player goes away, the host takes their house from their last presence mask. When they come back, their
-  page takes whichever mask has the higher version.
-- **Eliminations:** the host reads every mask each tick; a house at 0 glass is out at that match time (`data.out`), final. The
-  host ends the round with the ranking when at most one house has glass; `roundSeconds` ends it at 3:00.
-- **Every page checks every throw:** the thrower is a seat in the match (bots only from the host), the kind is allowed (a
-  special only from its holder, a pebble only from a ghost), the speed is inside that kind's range (+5%), the origin is inside
-  the thrower's lawn (or the ghost zone) at hand height, `t` is within 1.5 s before now, and a token bucket per thrower (6, one
-  per 0.75 s) holds. Anything else is dropped. Presence and host state are checked for shape and ranges; names are drawn as
-  text only.
+- **Throws are messages:** `room.send({ k: 'throw', id, by, kind, r, o, v, tk })`: the round, the release point in mm, the
+  velocity in mm/s and the round tick it left the hand. Bots' throws come from the host. About 1-2 messages a second per player.
+- **Every page simulates every stone** in fixed steps of 1/120 s on the match clock, with the wind as a function of the round's
+  seed and the time. A throw that arrives late (up to 1.5 s) is replayed from its tick, and checked against the stones that
+  were in the air in the last 0.5 s: if it knocked one down, what that stone did afterwards is undone.
+- **Who decides what** (`net.js` `decider`, `sync.js`):
+  - Your own glass and your own body: **your page**, published in your presence (20 times a second).
+  - Bots' houses and bodies, and the houses of players who are away or gone: **the host**, in host state (houses by seat id
+    under the round's key; bodies 10 times a second).
+  - The round's end, places and points, the specials, the tie-break tally: **the host** (`createMatch`, host state). Grabbing a
+    special is a claim the room's clock settles when two neighbours reach it together.
+- **Other pages predict:** a stone that hits a pane bursts it at once everywhere; the deciding page's mask (versioned) is the
+  truth, and a predicted break it doesn't have is put back.
+- **Handover:** when a player goes away the host takes their house from their last mask; when they come back their page keeps
+  whichever word has the higher version.
+- **Every page checks everything it reads** (`net.js`): a throw's thrower is a seat in the match (bots only from the host, a
+  player only for themselves), the kind is allowed (a special only from its holder, pebbles only from a ghost), the speed is in
+  range, the origin is on the thrower's lawn (or in the ghost zone), the tick is at most 1.5 s old and 0.4 s ahead, and a token
+  bucket per thrower (7, one more every 0.7 s) holds. Presence and host state are checked for shape and range; names are
+  drawn as text only.
 - **Cheating:** a player could make their own house unbreakable on their own page. Rewards are badges and leaderboards for fun;
   that is the trade the platform asks games to make, and it buys the defender a fair-feeling house.
 
@@ -312,11 +310,11 @@ Each street has a lineup of five (Palm Court: Walt, Ray, Rosa, Bev, the Twins; M
 | Oak | trunk 0.7 m radius; canopy 4.5 m radius centred at 6.5 m high; fountain basin 3.5 m radius, 0.7 m high |
 | Throw speed | 14-30 m/s over 0.9 s wind-up; brick 12-22; pebble 7-15 |
 | Release point | 1.6 m eye height, hand 0.35 m right and 0.15 m below the eye |
-| Gravity / wind | 9.8 m/s² / 0-3 m/s² by street, x0.3 in round 1, x1.6 after 2:00 |
+| Gravity / wind | 9.8 m/s² / 0-3 m/s² by street, x0.3 in round 1, x1.6 after 1:30 |
 | Stone radius / intercept radius | 0.12 m / 0.45 m combined |
 | Panes | 20 per house, 1.2 x 2.0 m |
 | Ammo | 5 in the pile, one back every 0.8 s |
-| Repair | 1.5 s per pane; store closes at 2:00 |
+| Repair | 2.5 s per pane; store closes at 1:30 |
 | Bonk | 1.0 s stun, then 0.5 s immune; player hitbox a 0.35 m capsule, 1.8 m tall |
 | Strafe | 4.0 m/s |
 | Specials | first at 0:25, then every 25-35 s, none after 2:30, 15 s to grab |
@@ -324,18 +322,18 @@ Each street has a lineup of five (Palm Court: Walt, Ray, Rosa, Bev, the Twins; M
 | Round | 3:00 at most; 6 s result; 3 s intro before rounds 2+ |
 | Match | 1 / 3 / 5 rounds, 3-2-1 points; results 20 s (the host can skip) |
 
-**Targets the simulations must hit** (node tests, 6 bots, mixed personalities, 300 seeds per street; numbers above are tuned
-until they hold, and this table is updated with the final values):
-- Median round 2:00-2:30 on Palm Court; at most 25% of rounds reach 3:00; every round ends by 3:00.
-- First house out: median after 0:45; never before 0:20.
-- Winner's glass at the end: median 4-10 panes (close finishes).
-- No seat wins more than 1.25x its share on the ring streets; on Narrow Lane, Cliff Top and Hillside no seat more than 1.5x.
+**What the simulations check** (`test/balance.test.mjs` and `test/bots.test.mjs`, six bots of the street's lineup and skill,
+24-40 seeds per check; the numbers above were tuned until these held):
+- Median round between 1:40 and 2:45 on every street; at most 25% of rounds reach 3:00; every round ends by 3:00.
+- First house out: median 0:40 or later, never before 0:20.
+- No runaway seat: over 24 rounds (houses rotating as in a match) no neighbour wins more than 11 and no house more than 9
+  (Hillside's top terrace: 12).
 - Ghost pebbles cause at most 15% of all breaks.
-- A skill 0.3 bot beats skill 0.9 bots sometimes (at least 5% of rounds), and skill-0.9 bots beat skill-0.3 bots most of
-  the time (the ladder ramps).
-- A scripted beginner (one stone every 2 s, 50% of throws on the facade, no wind reading, repairs below 8) wins at least 15%
-  of rounds on Palm Court against its lineup.
-- A full match plays to the end for 200 seeds on every street: no NaN, no exceptions, no stone outside the world.
+- One skill-0.3 neighbour against five at 0.9 wins sometimes (at least 1 in 40) but under a sixth of rounds.
+- A scripted beginner (slow throws, half of them on the facade, no wind reading, late repairs), new to Palm Court, wins at
+  least 15% of rounds against its lineup.
+- A three-round match plays through on every street, and 40 more seeds over all streets end cleanly: no NaN, nobody
+  outside the world.
 
 ## Every screen
 
@@ -343,43 +341,42 @@ All big words and numbers are **house numerals**: cream or ink letters on enamel
 offset shadow as if mounted on a wall in a low sun. No dark boxes behind HUD items, no glassy panels.
 
 1. **Title.** The 3D attract round fills the screen (a crane shot that orbits the green, cutting to a close shot when a house
-   falls). "Glass Houses" in two lines of big mounted letters, left of centre. Below the centre, one tall **Play** door in
-   tangerine with a brass knob and "Play" on it (Space or Enter on desktop). A small brass plate under it: your stars ("12 / 24")
-   once you have any. The platform's menu stays in its corner.
-2. **Lobby.** The street from above at golden hour. On each lawn, a real-estate sign: avatar headshot and name for a player
-   (sign reads SOLD), a drawn portrait and name for a bot neighbour. Your lawn has a big arrow and your colour. A player who is
-   ready has their porch light on and a check on the sign. Top centre: the **Street plate** (a green street-name blade:
-   "Palm Court", with arrows for the host, and its stars) and the **Rounds plates** (1, 3, 5). Alone, the blade becomes the
-   ladder: eight blades in a row, padlocks on the locked ones. One "Invite" plate on the first bot's sign
-   (`ow.ui.showInvite()`). After a match, the standings board stays at the right until the next match starts. The bottom
-   88 px (the platform's Ready strip) stays clear.
-3. **Countdown and round intro.** Big numerals 3, 2, 1 drop onto your mailbox wall with a clack each; before rounds 2+, a
-   "Round 2" plate and the street's name on a blade.
+   falls). "Glass Houses" in two lines of big mounted letters, top left. Bottom centre, one tall **Play** door in tangerine
+   with a brass knob (Space or Enter on desktop). A small brass plate under it: your stars ("12 / 24") once you have any. The
+   platform's Ready strip is hidden on the title.
+2. **Lobby.** Behind and above your house, looking across the green (higher and further back in portrait). On each lawn, a
+   real-estate sign on a post: the owner's symbol and name (a person or a bot neighbour), a key for the host, a check when
+   ready; yours has a big arrow in your colour. Top centre: the **street** (alone: the ladder, eight green street-name blades
+   with stars and padlocks; with others: the host picks from their unlocked streets) and the **Rounds** plates (1, 3, 5).
+   After a match, the standings board sits at the right until the next match starts. The bottom stays clear for the
+   platform's Ready bar.
+3. **Countdown and round intro.** Big numerals 3, 2, 1 drop in with a clack each while the camera comes down to your lawn;
+   before every round, a "Round 2" plate and the street's name on a blade.
 4. **Play HUD** (first person):
-   - Top centre: the five other houses as plates in the order they stand around you (left to right), each in its colour with
-     its symbol and its number. The leader's plate wears a small gold sunburst. An out house's plate turns ink with a 0.
-   - Above the strip, centred: the **sunburst clock**, a mid-century starburst with the time left ("2:14") in its face and a
-     tick at the 2:00 store-closing mark. A wind arrow (turned to your view, 0-3 chevrons) sits under it.
-   - Bottom centre: **your plate**, the biggest number on screen, your symbol beside it, and your five stones in a row under it
-     (the special in hand replaces the first stone). Repair progress fills your plate from the bottom.
-   - Centre: a small dot reticle; while winding up, the dotted arc and its landing ring/cross.
-   - Hints: 2-5 words in mounted letters, low centre, then gone.
-   - The edge arrow pointing at whoever just broke your glass, for 1.5 s.
-   - Esc key hint, small, top right, while the mouse is locked; "Click" when a lock was refused.
-   - On phones, everything moves around `ow.ui.reserved` (stick, buttons, menu): the strip and clock go below the menu's row
-     in portrait, your plate sits above the buttons' row.
-5. **Out.** The camera lifts from your lawn as your house goes dark, then you're a ghost over the green. "Your house is out",
-   then "Pebbles crack glass". Your plate becomes a ghost outline.
-6. **Round end** (6 s). Cut to a third-person shot pushing in on the last house standing, glass glittering, its owner cheering
-   on the lawn, shards still settling everywhere else. A plate: "Walt's house stands". The round's points fly from the houses
-   to the standings plates (+3, +2, +1).
-7. **Results** (20 s; the host can skip). The winner's lawn: the top three on concrete planter podiums, glitter of glass
-   falling. Left: the standings as house plates (place numeral, avatar, name, points, panes broken). Alone: the street's stars
-   stamped in, "New best" where earned, the next street's blade lighting up. Then the lobby.
-8. **Watching** (latecomer): ghost view over the green, "Watching" by the platform at the top centre; our label low centre:
-   "Next round" (or "Next match").
-9. **Esc card:** Resume (and, for a private server's host, Pause). Solid plate in the street's colours, one column of large
-   buttons.
+   - **A number plate over every house**, in its owner's colour with its symbol, its number and the owner's name, pinned above
+     the roof. A house off screen keeps its plate pinned to the nearest side edge (stacked), so every number is always
+     readable, on a phone too. The leader's plate (only when one house leads alone) wears a gold sunburst; a hit makes a plate
+     thump; an out house's plate turns ink with a 0.
+   - Top centre: the **sunburst clock**, a mid-century starburst with the time left ("2:14") in its face, the round's progress
+     round the rim and a terracotta tick at the 1:30 store-closing mark. The **wind arrow** (turned to your view, longer when
+     stronger) sits under it.
+   - Bottom centre: **your plate**, the biggest number on screen, your symbol beside it, your five stones in a row under it (the
+     special in hand replaces the first stone; a ghost's three pebbles instead). Repair progress fills your plate from the
+     bottom.
+   - Centre: a small dot reticle; while winding up, the dotted arc and its landing ring or cross.
+   - Hints: 2-5 words in mounted letters, low centre, once each.
+   - The edge arrow pointing at whoever just broke your glass, for 1.5 s, and a white flash at the edges.
+   - Esc key hint, small, top right, while the mouse is locked; "Click" when it isn't.
+   - On phones everything moves around `ow.ui.reserved` (the platform's menu, stick and buttons).
+5. **Out.** Your house goes dark, "Your house is out", then you're a ghost over the green; "Pebbles crack glass" once. Your
+   plate becomes a ghost outline with pebbles.
+6. **Round end** (6 s). A third-person shot pushing in on the last house standing, shards settling everywhere else. A plate:
+   "Your house stands", "Walt's house stands" or "A tie".
+7. **Results** (20 s). The winner's house; "You win" or "Rosa wins"; the standings board (place, symbol, name, panes broken,
+   points). Alone: the stars you won are kept, and the next street is picked for you in the lobby.
+8. **Watching** (latecomer): a ghost's view over the green; "Next round" (or "Next match" when every house has a person).
+9. **Esc card:** Resume (and Pause for a private server's host or a player alone). Solid plate in the street's colours, one
+   column of large buttons.
 10. **Room closed:** one message and one button (above).
 
 ## Art direction
@@ -410,30 +407,32 @@ turquoise `#2BB7B3` ring, coral `#E8645A` diamond, cobalt `#3563B8` triangle, pl
 breeze-block mailbox wall. The same numerals, on the same enamel plates with the same low-sun shadow, are every number in the
 game: the HUD strip, your plate, the clock, the countdown, the places on the results.
 
-**Glass that reads as glass:** `MeshStandardMaterial` panes (one InstancedMesh for all 120) with a slight aqua tint, near-zero
-roughness and an environment map baked once per street (PMREM of a procedural sky with the sun), so whole panes flash gold
-when the sun hits them. A broken pane is an empty frame with jagged teeth left in it (a second InstancedMesh). A cracked pane
-gets a star-crack decal. At 40 m, whole and broken read apart by shape and by glint.
+**Glass that reads as glass:** the 120 panes are one InstancedMesh with a drawn pane texture: a cool tint darker at the foot,
+two bright diagonal streaks and a lit top and left edge, more opaque where it shines. On top, a reflective standard material
+and an environment map baked once per street (PMREM of the sky with its sun), so panes also flash gold at the right angle.
+The blending adds what the glass reflects and dims what is behind it, so the lit room behind reads through. It reads on low
+quality too: the streaks are in the texture, not in the lighting. A broken pane is an empty frame with jagged teeth left in
+it (three tooth shapes, instanced); a cracked pane gets a star-crack decal.
 
-**Shattering is the star:** each break throws 25-40 triangular shards (one InstancedMesh, cap 600 on high, 300 medium, 150 low)
+**Shattering is the star:** each break throws 24-38 triangular shards (one InstancedMesh)
 with simple physics: gravity, spin, a bounce off the floor or plinth, then they settle and stay, glinting, until the round
-ends (oldest recycled). By the end of a round every house sits in a glittering pile. A burst of glints on the hit, a puff of
+ends (oldest recycled; 700 on high, 360 medium, 160 low). By the end of a round every house sits in a glittering pile. A burst of glints on the hit, a puff of
 dust on the plinth.
 
 **Light and camera:** a low warm sun (`#FFC07A`, 12° high) with soft shadows (a tight shadow camera over the street; map size
 by `ow.settings.quality`: none, 1024, 2048), a hemisphere light (peach sky, olive bounce), sRGB output, ACES tone mapping,
-peach distance fog, the sun sinking a few degrees over the round. First person at 1.6 m, FOV 70° vertical (wider in portrait so
-the horizontal view stays above 65°). Camera shake from a trauma value (`shake = trauma²`, smooth noise) on bonks, nearby
-shatters and your house falling; none with reduced motion. Bloom only on high quality for sun glints and porch lights, if it
-earns its cost.
+peach distance fog blended into the sky, distant mesas in the haze. First person at 1.6 m, FOV 66° vertical (in portrait,
+wide enough for a 78° horizontal view). Camera shake from a trauma value (`shake = trauma²`, smooth noise) on bonks, nearby
+shatters and your house falling; none with reduced motion. No bloom. A computer drawing without a graphics chip (a software
+renderer) gets low quality and pixel ratio 1 whatever the setting says.
 
-**Players and bots:** stylised low-poly people (rounded, not blobby) in their house colour, with the symbol on the shirt, a
-name label above them (white with a dark outline). Players' faces are their avatar headshots on the lobby signs and the results;
-bots are the eight neighbours above, each with a prop. Your first-person arm has a sleeve in your colour and holds the stone,
-brick or gnome; it pulls back as you wind up and snaps forward on release.
+**Players and bots:** stylised low-poly people in their house colour; the bot neighbours dressed as above (Walt's flat cap,
+Ray's and Rosa's aprons, Bev's pink robe, Sunny's skates and visor, Lindqvist's sun hat, Chad's headband and bare arms, the
+Twins as two kids). Names live on the house plates and lawn signs, not over heads. Your first-person arm has a sleeve in your
+colour and holds the stone, brick or gnome; it pulls back as you wind up and snaps forward on release.
 
 **HUD in the world's language:** enamel house-number plates, a starburst clock, real stones for ammo, street-name blades for
-streets, real-estate signs in the lobby, the hardware store's neon for the 2:00 mark.
+streets, real-estate signs in the lobby, the hardware store's neon for the 1:30 mark.
 
 **Not this:** glassy cards (the glass is in the world, never the UI), gradients and glows, pill chips, emoji, "BOT" or "YOU"
 pills, a dimmed title card, purple and teal neon.
@@ -468,22 +467,28 @@ the vibes play a tense two-chord vamp.
 
 ## Store art and the trailer
 
-- **Cover** (`cover`, thumb-1): first person on your lawn at golden hour, arm back with a stone, the dotted arc across the green
-  to a house that's bursting into shards mid-frame, house numbers readable, "Glass Houses" once, big.
-- **Action** (`action`, thumb-2): a pane mid-shatter in close-up, the stone just through, shards fanning out against the sun.
-  No text.
-- **Win** (`win`, thumb-3): the last house standing, every pane gold in the sunset, the other houses dark among glittering
-  piles, its owner cheering on the lawn.
-- **Multi** (`multi`, thumb-4): high over the cul-de-sac, stones in the air from four lawns, a gnome mid-flight, a ghost over
-  the green.
-- **Icon**: one pane with a stone punching through it in a star of cracks, on a gold sunset disc. No text.
-- **Badges**: a bold symbol for each on a coloured disc (a stone, shards, a house, half a glass, a clean pane, two clacking
-  stones, a gnome, a bonk star, a key, a street blade).
-- **Trailer** (25-30 s, real play with `?autoplay=1&debug`, only when `ow.mode` isn't production): 0-3 s a first-person throw,
-  the arc, a house bursting and its number ticking (the goal); 3-8 s quick cuts of shatters around the street, numbers falling;
-  8-12 s an intercept clack in mid-air; 12-17 s a brick takes three, a gnome ricochets; 17-20 s a bonk, then the store's neon
-  flips to CLOSED; 20-27 s the final duel, the last pane breaks, the winner's house glitters; last 2 s "Glass Houses" over the
-  attract shot.
+Every picture is drawn by the game's own renderer from a real round frozen at its moment (`?poster=<name>`, `poster.js`):
+- **Cover** (`cover`, thumb-1): from the green at golden hour, side-on to a throw: a neighbour winding up on their lawn, the
+  dotted arc soaring over the green onto the next house's glass front, a pane there bursting. "Glass Houses" once, big, over
+  the sky.
+- **Action** (`action`, thumb-2): a glass front close up, one pane exploding out toward you and another already gone, the next
+  stone a stride from the glass. No text.
+- **Win** (`win`, thumb-3): the last house standing at sunset, its glass lit, the others out.
+- **Multi** (`multi`, thumb-4): Porch Lights at night from under the oak: two neighbours trading stones across their lawns,
+  trails glowing, both fronts bursting.
+- **Icon**: a whole glass front at golden hour with two panes bursting and a stone flying at it from just past the lens. No
+  text.
+- **Badges**: a bold symbol for each on a coloured disc (a stone, a cracked pane, a house, a half-full pane, a clean pane with
+  sparkles, two clacking stones, a gnome, a head with stars, a sunburst with a check, eight panes round a lawn).
+- **Trailer** (`store/trailer.mp4`, 21 s, 1280×720, the game's own sound and music): six shots of real autoplay rounds, hard
+  cuts. 0-1 s riding behind a stone into a neighbour's glass front, its number dropping 16, 15, 14 (the goal); 1-6 s first
+  person on Palm Court, stone in hand, throwing across the green while the numbers fall; 6-9 s riding a lob high over the
+  street and down onto a house; 9-11 s late on Sunset Loop, the dotted arc and a stone going in; 11-17 s the last houses, then
+  "Your house stands"; 17-21 s "Glass Houses" on the title screen while the win's music plays on. Captured with `vcap` from a
+  local build served on its own (a room of one, so the clock stays the page's own). The capture hooks are local only:
+  `?autoplay=1` (this page plays itself with the bot brain), `?hush=1` (no sound until `__glass.hush(false)`, so a take can
+  start late in a round without a long soundtrack to render) and `window.__glass` (the camera: first person, `chase`,
+  `orbit`, `weak` or `stone`; the round clock; standing houses; breaks seen; draw calls).
 
 ## Originality check
 
@@ -503,7 +508,15 @@ street with pebbles. It is first person, in a sunlit mid-century street, not a 2
 - **Specials land between two lawns**, so neighbours race for them, instead of near one house (a gift by luck).
 - **Brick and gnome rules** made exact: the brick breaks 3 in a row, the gnome breaks 2 by ricocheting along the facade.
 - **The arc shows the path without wind**: aiming is easy, the wind is the skill.
-- **Streets as layouts that all face one centre**, so every lawn can reach every house; Narrow Lane is two curved rows.
+- **Streets as layouts that all face one centre**, so every lawn can reach every house. Street 3 became Little Loop, a tight
+  ring: in a straight lane, next-door fronts face the same way and can't be seen from each other's lawns.
+- **The store closes at 1:30 and a pane takes 2.5 s** (planned 2:00 and 1.5 s): tuned until the balance simulations held (median
+  round 1:40-2:45, few rounds reaching 3:00); the second half of a round is a straight fight.
+- **Everyone moves one house along each round**, so nobody keeps the best spot for a whole match.
+- **House plates over the houses instead of a strip at the top:** a number over each house (pinned to the screen's side when
+  the house is behind you) is readable on a phone at any distance, and says which house is which without a legend.
+- **Calm and gentle starts** are tied to round 1 (wind x0.3) and to a new player alone on the first two streets (bots hold off),
+  so the first minute teaches the throw before the wind.
 - **Ladder stars** are for your best round win on a street (1, 8+ or 15+ panes left), and one star unlocks the next street.
 
 ## Risks and how they're handled
@@ -514,23 +527,30 @@ street with pebbles. It is first person, in a sunlit mid-century street, not a 2
 | Three players gang up and someone is out in 30 s | Bots spread targets (20% switch, no piling on a first-timer), the last panes are hard to hit, repair; sims check the first-out time |
 | Late messages make pages disagree | Deterministic stones on the match clock, one page decides each house, a 400 ms correction window, predicted breaks put back if not confirmed |
 | A host reload or change mid-round | Everything the host decides is in host state; bots, specials and away houses resume from it; tested through a fake room |
-| Phone performance (glass, shards, shadows) | Instanced panes, shards and stones; static geometry merged per material (under 120 draw calls); env map baked once; no transmission; shadows and shard caps by quality; pause on hidden |
+| Phone performance (glass, shards, shadows) | Instanced panes, shards and stones; static geometry merged per material (under 250 draw calls); env map baked once; no transmission; shadows and shard caps by quality; pause on hidden |
 | iOS Safari | WebGL2 with a WebGL1-safe material set, audio started by the Play tap, every optional API guarded, no per-frame allocations |
-| Glass not reading as glass from far away | Glints from the baked sky, frames and broken teeth that differ in shape, the house number as the truth |
+| Glass not reading as glass from far away | A drawn pane texture with streaks (works on low quality), glints from the baked sky, broken teeth that differ in shape, the house number as the truth |
 | Pointer lock refusals | The guide's rules: lock from a click in the world, Esc card with Resume, "Click" hint on a refusal, drag to look when locks keep failing |
 | Too many rules | Every rule above shows itself in play (a cracked pane looks cracked, a closed store says CLOSED, a brick breaks three); hints teach only throw, repair and specials |
 
 ## How it's built
 
-Vite + three.js (+ GSAP for UI tweens, `@fontsource/josefin-sans`, `@fontsource/jost`), `"dir": "dist"`, `base: './'`.
+Vite + three.js, `@fontsource/josefin-sans` and `@fontsource/jost`, the SDK (`@onceworlds/sdk` with its match, host and bots
+helpers); `"dir": "dist"`, `base: './'`.
 
-- Pure modules (no page, no three.js at import; tested in node): `config.js` (every number), `rng.js`, `streets.js` (the eight
-  layouts), `physics.js` (stone paths, wind, intercepts, facade and body hits), `rules.js` (panes, specials, repair, store,
-  eliminations, ranking), `bots.js` (brains), `sim.js` (a headless round: the attract mode, autoplay and balance tests),
-  `net.js` (throw validation, authority, masks), `progress.js` (stars, unlocks, badges).
-- Page modules: `main.js` (join first, poster mode, the frame loop), `world.js` (the street), `glass.js` (panes, cracks,
-  shards), `people.js` (figures, the first-person arm), `hud.js`, `screens.js` (title, lobby, results), `input.js`,
-  `audio.js`, `music.js`, `poster.js`.
-- Tests: `test/*.test.mjs` with `node --test`: rules and scoring, physics, bots (legal, beatable, not useless), balance
-  simulations, 200-seed full matches per street, throw validation and the room flow through a fake room (host reload, a
-  leaver, a latecomer).
+- Pure modules in `src/core` (no page, no three.js; tested in node): `config.js` (every number), `rng.js`, `streets.js` (the
+  eight layouts), `physics.js` (stone paths, wind, intercepts, facade and body hits, the aim solver), `round.js` (a round:
+  panes, throws, specials, repair, the store, ghosts, eliminations, ranking), `bots.js` (brains and personalities), `sim.js`
+  (a headless round: the title's attract round, autoplay and the balance tests), `sync.js` (one page's side of a round in a
+  match: who decides what, presence, host state), `net.js` (checks on everything read from the network), `progress.js`
+  (stars, unlocks, badges).
+- `src/online.js`: the join, the lobby settings, `createMatch`, host state, the special claim, presence.
+- Page modules in `src/view`: `stage.js` (renderer, sky, light, environment map), `build.js` (merged static geometry),
+  `street.js` (the street), `glass.js` (panes, cracks, teeth, shards), `people.js` (figures, the first-person arm), `fx.js`
+  (stones and trails, the arc, puffs, leaves, specials), `world.js` (all of it drawn from a round), `ui.js` (every screen's
+  DOM), `input.js`, `audio.js`, `music.js`, `palette.js`, `poster.js`.
+- `src/main.js`: join first, the title, lobby and rounds, cameras, events into sound and shards, the HUD.
+- Static geometry is merged per material; panes, teeth, cracks, shards, stones, trails, arc dots and puffs are instanced, so a
+  frame is about 80-110 draw calls with shadows (measured on high quality at 1280×720, first person and from above).
+- Tests (`npm test`, `node --test`): rules and scoring, physics, bots (legal, beatable, not useless), balance simulations,
+  throw and presence checks, and the room flow through a pretend room (host reload, a leaver, a latecomer).
