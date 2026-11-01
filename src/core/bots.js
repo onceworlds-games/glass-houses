@@ -13,8 +13,8 @@ export const PERSONAS = {
   twins: { name: 'The Twins', cadence: [0.3, 0.6], lob: 0.15, target: 'nearest', repairBelow: 5, acc: -0.08, wild: 1.25, intercept: -0.1, dodge: 0.85, grab: 0.6, burst: 1, soft: true },
   chad: { name: 'Chad', cadence: [0.35, 0.7], lob: 0, target: 'leader', repairBelow: 0, acc: -0.2, wild: 1.7, intercept: -0.2, dodge: 0.2, grab: 0.5, burst: 1, hard: true },
   lindqvist: { name: 'Mrs. Lindqvist', cadence: [1.0, 1.6], lob: 0.4, target: 'snipe', repairBelow: 9, acc: 0.15, wild: 0.7, intercept: 0.2, dodge: 0.4, grab: 0.2, burst: 1, wind: 0.15 },
-  rosa: { name: 'Rosa', cadence: [0.6, 1.1], lob: 0.4, target: 'defend', repairBelow: 14, acc: 0, wild: 1, intercept: 0.15, dodge: 0.5, grab: 0.4, burst: 1 },
-  sunny: { name: 'Sunny', cadence: [0.5, 1.0], lob: 0.3, target: 'repairers', repairBelow: 7, acc: 0, wild: 1, intercept: 0, dodge: 0.95, grab: 1, burst: 1, roam: true },
+  rosa: { name: 'Rosa', cadence: [0.7, 1.2], lob: 0.4, target: 'defend', repairBelow: 11, acc: 0, wild: 1, intercept: 0.05, dodge: 0.5, grab: 0.4, burst: 1 },
+  sunny: { name: 'Sunny', cadence: [0.5, 1.0], lob: 0.3, target: 'repairers', repairBelow: 7, acc: 0, wild: 1, intercept: 0, dodge: 0.85, grab: 1, burst: 1, roam: true },
   ray: { name: 'Ray', cadence: [0.9, 1.5], lob: 0.45, target: 'weakest', repairBelow: 10, acc: 0, wild: 1, intercept: 0, dodge: 0.3, grab: 0.3, burst: 1 },
   bev: { name: 'Bev', cadence: [0.25, 0.45], lob: 0.3, target: 'revenge', repairBelow: 10, acc: 0, wild: 1, intercept: 0, dodge: 0.4, grab: 0.4, burst: 3, pause: [2.4, 3.4] },
   // The player's own seat in autoplay and a plain bot with no story.
@@ -110,11 +110,11 @@ export function createBrain(personaId, skill, seed) {
       if ((P.target === 'revenge' || P.target === 'defend') && houses[i].lastBy === j) w *= 4;
       if (P.target === 'defend' && R.incoming(i).some((s) => s.seat === j)) w *= 3;
       const seat = R.seats[j];
-      // A new player on an easy street draws less fire: nobody at first, then one bot at a time, then half as much.
+      // A new player on an easy street draws less fire: nobody at first, then one bot at a time, then less than half as much.
       if (seat?.gentle && !me.ghost) {
         if (t < 6000) w = 0;
         else if (t < 30000 && R.botTargets.some((tg, k) => k !== i && tg === j && R.seats[k]?.bot)) w = 0;
-        else w *= 0.55;
+        else w *= 0.4;
       }
       const piled = R.botTargets.filter((tg, k) => k !== i && tg === j).length;
       if (piled >= 3) w *= 0.6;

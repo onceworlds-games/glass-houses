@@ -27,6 +27,12 @@ export const glassCount = (panes) => {
   return n;
 };
 
+/** Whether any pane is broken or cracked (a glazier has work). */
+export const needsGlass = (panes) => {
+  for (let i = 0; i < panes.length; i++) if (panes[i] < GLASS) return true;
+  return false;
+};
+
 export function maskOf(panes) {
   let g = 0;
   let c = 0;
@@ -122,6 +128,7 @@ export function createRound(opts) {
     specialPlan: [],
     onThrow: opts.onThrow ?? null,
     onGrab: opts.onGrab ?? null,
+    isHost: host,
   };
 
   // ------------------------------------------------------------ the specials' schedule, from the seed (the host spawns them)
@@ -160,9 +167,11 @@ export function createRound(opts) {
     R.counters[seat]++;
     return {
       k: 'throw',
-      id: `${seats[seat].id}:${R.roundNo}:${R.counters[seat]}`,
+      // Unique whichever page throws it: a seat throws at most once a tick, and a new host's count starts again.
+      id: `${seats[seat].id}:${R.roundNo}:${R.tick}`,
       by: seats[seat].id,
       kind,
+      r: R.roundNo,
       o: [Math.round(o.x * 1000), Math.round(o.y * 1000), Math.round(o.z * 1000)],
       v: [Math.round(v.x * 1000), Math.round(v.y * 1000), Math.round(v.z * 1000)],
       tk: R.tick,
@@ -608,7 +617,7 @@ export function createRound(opts) {
     }
     // Repairing.
     const speed = Math.hypot(b.vx, b.vz);
-    const want = inp.repair && !b.ghost && !b.winding && !stunned && speed < 0.4 && t < STORE_CLOSE_MS && house.outAt < 0 && glassCount(house.panes) < PANES && decides(i) && !R.over;
+    const want = inp.repair && !b.ghost && !b.winding && !stunned && speed < 0.4 && t < STORE_CLOSE_MS && house.outAt < 0 && needsGlass(house.panes) && decides(i) && !R.over;
     if (want) {
       b.repairing = true;
       b.repairMs += dtMs;
@@ -634,7 +643,7 @@ export function createRound(opts) {
         const dx = sp.x - b.x;
         const dz = sp.z - b.z;
         if (dx * dx + dz * dz > PICKUP_R * PICKUP_R) continue;
-        if (host) {
+        if (R.isHost) {
           sp.holder = i;
           b.held = sp.kind;
           emit({ type: 'grab', seat: i, kind: sp.kind, id: sp.id, x: sp.x, z: sp.z });
@@ -699,7 +708,7 @@ export function createRound(opts) {
     const k = R.tick;
     const t = k * TICK_MS;
     R.now = t;
-    if (host && !R.over) spawnSpecials(t);
+    if (R.isHost && !R.over) spawnSpecials(t);
     for (let i = 0; i < n; i++) if (controls(i)) controlBody(i, TICK_MS);
     windAt(field, seedNum, R.roundNo, t, wind);
     const live = R.stones;
@@ -807,6 +816,17 @@ export function createRound(opts) {
     }
     if (outAt !== undefined && outAt >= 0 && house.outAt < 0) house.outAt = outAt;
     if (house.outAt < 0 && g === 0) house.outAt = R.now;
+  };
+
+  /** Sets a house from a mask whoever decides it (a reloaded page taking its own house back). */
+  R.setMaskForce = function setMaskForce(h, g, c, version, outAt) {
+    const house = R.houses[h];
+    if (!house) return;
+    panesFromMask(g >>> 0, c >>> 0, house.panes);
+    house.pending.clear();
+    house.version = version;
+    if (outAt !== undefined && outAt >= 0) house.outAt = outAt;
+    else if (g === 0 && house.outAt < 0) house.outAt = R.now;
   };
 
   /** Adopts a house this page now decides (its owner went away): from what the others last said. */

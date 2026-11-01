@@ -23,7 +23,7 @@ export const STREETS = [
     lineup: ['lindqvist', 'walt', 'chad', 'bev', 'sunny'],
   },
   {
-    id: 'hillside', name: 'Hillside', R: 22, spread: 360, rot: 90, elev: [0, 2, 5, 6, 5, 2], centre: 'oak', light: 'golden',
+    id: 'hillside', name: 'Hillside', R: 22, spread: 360, rot: 90, elev: [0, 1.5, 3.5, 4.5, 3.5, 1.5], centre: 'oak', light: 'golden',
     wind: [0, 1.5], gust: 0.6, ice: false, skill: [0.5, 0.7], specialGap: [25000, 35000],
     lineup: ['rosa', 'chad', 'lindqvist', 'ray', 'twins'],
   },
@@ -33,7 +33,7 @@ export const STREETS = [
     lineup: ['bev', 'sunny', 'walt', 'lindqvist', 'chad'],
   },
   {
-    id: 'snow-day', name: 'Snow Day', R: 20, spread: 360, rot: 90, elev: [0, 0, 0, 0, 0, 0], centre: 'bare-oak', light: 'snow',
+    id: 'snow-day', name: 'Snow Day', R: 22, spread: 360, rot: 90, elev: [0, 0, 0, 0, 0, 0], centre: 'bare-oak', light: 'snow',
     wind: [0.5, 2.0], gust: 0.7, ice: true, skill: [0.6, 0.8], specialGap: [25000, 35000],
     lineup: ['twins', 'rosa', 'chad', 'sunny', 'lindqvist'],
   },
