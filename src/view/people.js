@@ -839,7 +839,7 @@ export function makeArm(seat, persona = 'player') {
   const holds = {};
   let stoneId = 'river';
   // A hot stone glows from inside: the same stone, its own material lit orange (the shared one stays as it is).
-  let heldMesh = null;
+  let handStone = null;
   let coolMat = null;
   let hotMat = null;
   let hotNow = false;
@@ -903,22 +903,31 @@ export function makeArm(seat, persona = 'player') {
     m.frustumCulled = false;
     m.castShadow = false;
     g.add(m);
-    heldMesh = m;
+    handStone = m;
     coolMat = m.material;
     if (hotMat) hotMat.dispose();
     hotMat = null;
     if (hotNow) burn(true);
   }
-  // (heldMesh, coolMat, hotMat, hotNow: declared at the top, since whenRigs can run its callback at once.)
+  // (handStone, coolMat, hotMat, hotNow: declared at the top, since whenRigs can run its callback at once.)
   function burn(on) {
     hotNow = on;
-    if (!heldMesh) return;
+    if (!handStone) return;
     if (on && !hotMat) {
+      // Charred on its face, molten round its edges: a stone gone hot, not an orange ball.
       hotMat = coolMat.clone();
-      hotMat.emissive = new THREE.Color('#FF5A12');
-      hotMat.emissiveIntensity = 0.9;
+      hotMat.color = coolMat.color.clone().multiplyScalar(0.5);
+      hotMat.emissive = new THREE.Color('#FF4A0E');
+      hotMat.emissiveIntensity = 1;
+      hotMat.onBeforeCompile = (sh) => {
+        sh.fragmentShader = sh.fragmentShader.replace(
+          '#include <emissivemap_fragment>',
+          '#include <emissivemap_fragment>\n  float hotRim = 1.0 - abs(dot(normal, normalize(vViewPosition)));\n  totalEmissiveRadiance *= 0.12 + 1.7 * pow(hotRim, 2.0);',
+        );
+      };
+      hotMat.customProgramCacheKey = () => 'hot-stone';
     }
-    heldMesh.material = on ? hotMat : coolMat;
+    handStone.material = on ? hotMat : coolMat;
   }
   let lastThrow = -1e9;
   let swingT = -1;
@@ -945,7 +954,7 @@ export function makeArm(seat, persona = 'player') {
     /** The stone in hand burns (a hot stone); `pulse` 0..1 flickers it. */
     setHot(on, pulse = 0.5) {
       if (on !== hotNow) burn(on);
-      if (on && hotMat) hotMat.emissiveIntensity = 0.65 + 0.6 * pulse;
+      if (on && hotMat) hotMat.emissiveIntensity = 0.75 + 0.6 * pulse;
     },
     /** Where the stone in hand is (world), if it's showing. */
     stoneAt(out) {

@@ -1056,6 +1056,7 @@ async function boot() {
         g.phase = 'round';
         goUntil = now + 900;
         sound.count(0);
+        if (profile.rounds < 3) ui.hint('Break their glass', 2200);
       }
     } else if (g.phase === 'round') {
       if (!g.paused && !menuOpen) {
@@ -1624,10 +1625,12 @@ async function boot() {
           const cx = handTmp.x + handFace.x * 0.07;
           const cy = handTmp.y + handFace.y * 0.07;
           const cz = handTmp.z + handFace.z * 0.07;
-          W.fx.parts.glowAt(cx, cy + 0.02, cz, '#FF7A1A', 0.2, 0.42, SHAPE.puff, true);
-          if (Math.random() < dt * 70) {
+          W.fx.parts.glowAt(cx, cy + 0.01, cz, '#FF7A1A', 0.065, 0.35, SHAPE.puff, true);
+          // Flames lick up off its top, with now and then a spark.
+          if (Math.random() < dt * 90) {
             const a = Math.random() * Math.PI * 2;
-            W.fx.parts.emit({ x: cx + Math.cos(a) * 0.04, y: cy + 0.03 + Math.random() * 0.03, z: cz + Math.sin(a) * 0.04, vx: (Math.random() - 0.5) * 0.12, vy: 0.3 + Math.random() * 0.2, vz: (Math.random() - 0.5) * 0.12, color: Math.random() < 0.5 ? '#FFC04A' : '#FF6A1A', bright: 1.6, size: 0.03 + Math.random() * 0.025, grow: 0.5, life: 0.28 + Math.random() * 0.14, shape: SHAPE.flame, add: true, rise: 1.4, drag: 2 });
+            const sp = Math.random() < 0.12;
+            W.fx.parts.emit({ x: cx + Math.cos(a) * 0.05, y: cy + 0.04 + Math.random() * 0.03, z: cz + Math.sin(a) * 0.05, vx: (Math.random() - 0.5) * (sp ? 0.5 : 0.12), vy: sp ? 0.7 + Math.random() * 0.4 : 0.32 + Math.random() * 0.2, vz: (Math.random() - 0.5) * (sp ? 0.5 : 0.12), color: sp ? '#FFE08A' : Math.random() < 0.5 ? '#FFB13A' : '#FF5A14', bright: sp ? 2.2 : 1.7, size: sp ? 0.012 : 0.035 + Math.random() * 0.03, grow: sp ? 0 : 0.6, life: sp ? 0.5 : 0.26 + Math.random() * 0.16, shape: sp ? SHAPE.dot : SHAPE.flame, add: true, rise: sp ? 0 : 1.5, gravity: sp ? 1.2 : 0, drag: 2 });
           }
         }
       }
