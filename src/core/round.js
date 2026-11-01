@@ -475,7 +475,7 @@ export function createRound(opts) {
       return;
     }
     if (what === 'ground' || what === 'terrace') {
-      emit({ type: 'land', what, x: h.x, y: h.y, z: h.z, by, kind: s.kind });
+      emit({ type: 'land', what, x: h.x, y: h.y, z: h.z, by, kind: s.kind, vx: s.vx, vz: s.vz });
       return;
     }
     if (what === 'sea' || what === 'gone') {
