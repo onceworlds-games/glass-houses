@@ -1,0 +1,33 @@
+{
+  "slug": "glass-houses",
+  "name": "Glass Houses",
+  "description": "Everyone lives in a glass house. Everyone throws stones. Last house standing wins.",
+  "dir": "dist",
+  "productionBranch": "main",
+  "genre": "Action",
+  "icon": "store/icon.png",
+  "thumbnails": ["store/thumb-1.png", "store/thumb-2.png", "store/thumb-3.png", "store/thumb-4.png"],
+  "badges": [
+    { "id": "first-stone", "name": "First Stone", "description": "Break your first pane.", "icon": "store/badge-first-stone.png" },
+    { "id": "shattered", "name": "Shattered", "description": "Break 50 panes.", "icon": "store/badge-shattered.png" },
+    { "id": "last-house-standing", "name": "Last House Standing", "description": "Win a round.", "icon": "store/badge-last-house-standing.png" },
+    { "id": "glass-half-full", "name": "Glass Half Full", "description": "Win a round with 10 or more panes left.", "icon": "store/badge-glass-half-full.png" },
+    { "id": "not-a-scratch", "name": "Not a Scratch", "description": "Win a round without losing a pane.", "icon": "store/badge-not-a-scratch.png" },
+    { "id": "interception", "name": "Interception", "description": "Knock a stone out of the air.", "icon": "store/badge-interception.png" },
+    { "id": "gnome-run", "name": "Gnome Run", "description": "Break 2 panes with one gnome.", "icon": "store/badge-gnome-run.png" },
+    { "id": "fore", "name": "Fore!", "description": "Bonk a neighbour.", "icon": "store/badge-fore.png" },
+    { "id": "house-proud", "name": "House Proud", "description": "Win a match.", "icon": "store/badge-house-proud.png" },
+    { "id": "the-whole-street", "name": "The Whole Street", "description": "Win a round on all eight streets.", "icon": "store/badge-the-whole-street.png" }
+  ],
+  "controls": [
+    { "keys": ["Mouse"], "action": "Aim (click in the street first)" },
+    { "keys": ["Hold Click", "Hold Space"], "action": "Wind up, let go to throw" },
+    { "keys": ["W", "A", "S", "D"], "action": "Move on your lawn" },
+    { "keys": ["Arrows"], "action": "Move on your lawn" },
+    { "keys": ["Hold R"], "action": "Repair your glass" },
+    { "keys": ["Esc"], "action": "Free the mouse" },
+    { "keys": ["Drag"], "action": "Aim on a touch screen" },
+    { "keys": ["Throw", "Repair"], "action": "Touch buttons" },
+    { "keys": ["Space", "Enter"], "action": "Play on the title" }
+  ]
+}
