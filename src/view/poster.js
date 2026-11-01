@@ -88,6 +88,7 @@ function shatter(W, R, house, panes, dir, ms) {
   W.glass.sync(R.houses);
   for (const p of panes) W.glass.burst(house, p, dir, 1.4);
   for (let t = 0; t < ms; t += 16) W.glass.update(0.016);
+  W.glass.setScale(720 / (2 * Math.tan((50 * Math.PI) / 360)));
 }
 
 function setPanes(R, house, broken = [], cracked = []) {
@@ -302,6 +303,12 @@ function look(stage, W, w, h, params) {
   }
   draw(W, R);
   for (let k = 0; k < 40; k++) W.street.update(0.05, 12 + k * 0.05, R.windNow());
+  if (params.get('burst')) {
+    // ?burst=house:pane.pane&bms=ms after: shards in the air.
+    const [hs, ps] = params.get('burst').split(':');
+    const hb = R.field.houses[Number(hs)];
+    shatter(W, R, Number(hs), ps.split('.').map(Number), { x: -hb.fx * 9, y: 1, z: -hb.fz * 9 }, Number(params.get('bms') ?? 200));
+  }
   if (params.get('glass') === 'mirror') {
     W.glass.group.traverse((o) => {
       if (o.material?.envMapIntensity !== undefined) {

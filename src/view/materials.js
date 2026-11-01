@@ -102,7 +102,7 @@ export function interiorMaterial({ map = null, glow = '#FFC985', self = 0.18, ro
       .replace('#include <begin_vertex>', `#include <begin_vertex>\nvLit = uLit[int(clamp(sway + 0.5, 0.0, 5.0))];`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\nvarying float vLit;`)
-      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance *= diffuseColor.rgb * vLit;\ndiffuseColor.rgb *= mix(0.35, 1.0, vLit);`);
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance *= diffuseColor.rgb * vLit;\ndiffuseColor.rgb *= mix(0.25, 0.6, vLit);`);
   };
   m.customProgramCacheKey = () => `interior:${!!map}`;
   return m;

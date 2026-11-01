@@ -9,7 +9,7 @@ import { createRng } from '../core/rng.js';
 const HALF_W = FACADE_W / 2;
 const CELL_U = PANE_W + MULLION;
 const CELL_Y = PANE_H + MULLION;
-const SHARDS = { low: 160, medium: 360, high: 700 };
+const SHARDS = { low: 220, medium: 600, high: 1100 };
 
 /**
  * Glass as light does it: what it reflects is added on top, what is behind shows through, dimmed by the tint. Straight on you see
@@ -34,27 +34,44 @@ export function glassMaterial(opts = {}) {
   m.blendDst = THREE.OneMinusSrcAlphaFactor;
   m.blendEquation = THREE.AddEquation;
   const tilted = !!opts.tilt;
+  const sheen = opts.sheen ?? 0;
   const reflect = (opts.reflect ?? 4.5).toFixed(2);
   m.onBeforeCompile = (shader) => {
-    shader.fragmentShader = `#define REFLECT ${reflect}\n${shader.fragmentShader}`;
-    if (tilted) {
-      shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nattribute vec2 tilt;')
-        .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nobjectNormal = normalize(objectNormal + vec3(tilt, 0.0));');
-    }
+    shader.fragmentShader = `#define REFLECT ${reflect}\n#define SHEEN ${sheen.toFixed(2)}\n${sheen > 0 ? '#define SHEEN_ON\n' : ''}${shader.fragmentShader}`;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>\nvarying vec2 vGlassUv;\nvarying float vGlassSeed;${tilted ? '\nattribute vec2 tilt;' : ''}`)
+      .replace('#include <uv_vertex>', `#include <uv_vertex>\nvGlassUv = uv;\nvGlassSeed = ${tilted ? 'tilt.x * 13.0 + tilt.y * 7.0' : '0.0'};`);
+    if (tilted) shader.vertexShader = shader.vertexShader.replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nobjectNormal = normalize(objectNormal + vec3(tilt, 0.0));');
     shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vGlassUv;\nvarying float vGlassSeed;')
       .replace(
         '#include <opaque_fragment>',
         `{
           float fres = pow(1.0 - saturate(dot(normalize(normal), normalize(vViewPosition))), 4.0);
           // Window glass reflects about a fifth of the bright street straight on, nearly all of it at a glance.
-          outgoingLight += totalSpecular * (REFLECT + fres * 14.0);
+          #ifdef SHEEN_ON
+          // Float glass is a touch green-blue, and so is what it reflects: cool fronts against warm rooms.
+          vec3 cool = vec3(0.68, 0.88, 1.06);
+          #else
+          vec3 cool = vec3(1.0);
+          #endif
+          outgoingLight += totalSpecular * (REFLECT + fres * 14.0) * cool;
           diffuseColor.a = mix(diffuseColor.a, 0.94, fres);
+          #ifdef SHEEN_ON
+          // Tinted float glass: a cool body colour, brighter toward the top where it takes the sky, and two soft diagonal
+          // streaks that sit a little differently on every pane.
+          vec2 g = vGlassUv;
+          float d = fract(g.x * 0.75 + g.y * 0.42 + vGlassSeed) ;
+          float streak = smoothstep(0.09, 0.0, abs(d - 0.38)) * 0.6 + smoothstep(0.03, 0.0, abs(d - 0.53)) * 0.4;
+          vec3 body = vec3(0.03, 0.075, 0.1) * (0.5 + g.y);
+          outgoingLight += (body + vec3(1.0, 0.97, 0.92) * streak * 0.11) * SHEEN;
+          diffuseColor.a = max(diffuseColor.a, 0.6 + streak * 0.15 * SHEEN);
+          #endif
         }
         #include <opaque_fragment>`,
       );
   };
-  m.customProgramCacheKey = () => `glass:${tilted}:${reflect}`;
+  m.customProgramCacheKey = () => `glass:${tilted}:${reflect}:${sheen}`;
   return m;
 }
 
@@ -119,7 +136,32 @@ function teethGeometry(seed) {
   pts.forEach(([x, y], i) => (i ? hole.lineTo(x, y) : hole.moveTo(x, y)));
   hole.closePath();
   outer.holes.push(hole);
-  return new THREE.ShapeGeometry(outer);
+  return { teeth: new THREE.ShapeGeometry(outer), edge: edgeGeometry(pts) };
+}
+
+/** A thin bright ribbon along the broken edge, on the glass side: the fresh edge catches the light from across the street. */
+function edgeGeometry(pts) {
+  const pos = [];
+  const W = 0.05;
+  const n = pts.length;
+  // Outward (toward the frame) at each point: away from the pane's middle.
+  const out = pts.map(([x, y]) => {
+    const l = Math.hypot(x, y) || 1;
+    return [x / l, y / l];
+  });
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const [ax, ay] = pts[i];
+    const [bx, by] = pts[j];
+    const [aox, aoy] = out[i];
+    const [box, boy] = out[j];
+    const a2 = [ax + aox * W, ay + aoy * W];
+    const b2 = [bx + box * W, by + boy * W];
+    pos.push(ax, ay, 0.004, bx, by, 0.004, b2[0], b2[1], 0.004, ax, ay, 0.004, b2[0], b2[1], 0.004, a2[0], a2[1], 0.004);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  return g;
 }
 
 function crackTexture() {
@@ -179,17 +221,55 @@ export function createGlass(field, scene, quality = 'medium') {
   const frames = field.houses.map(houseFrame);
   const smudge = smudgeTexture();
   if (smudge) smudge.colorSpace = THREE.NoColorSpace;
-  const paneMat = glassMaterial({ roughnessMap: smudge, roughness: 1.0, opacity: 0.4, tilt: true });
+  const paneMat = glassMaterial({ roughnessMap: smudge, roughness: 1.0, opacity: 0.62, tilt: true, reflect: 3.2, sheen: 1 });
   // Pre-mirrored: the house frames mirror, and an instance matrix can't flip a mesh's facing the way an object's matrix does.
   const paneGeo = new THREE.PlaneGeometry(PANE_W, PANE_H).scale(-1, 1, 1);
   const panes = new THREE.InstancedMesh(paneGeo, paneMat, total);
   panes.renderOrder = 2;
-  const teethGeos = [teethGeometry(1), teethGeometry(2), teethGeometry(3)].map((g) => g.scale(-1, 1, 1));
-  const teethMat = glassMaterial({ opacity: 0.5, env: 2.6, roughness: 0.05, color: '#1A2C2C', side: THREE.DoubleSide });
+  const broken = [teethGeometry(1), teethGeometry(2), teethGeometry(3)];
+  const teethGeos = broken.map((b) => b.teeth.scale(-1, 1, 1));
+  const edgeGeos = broken.map((b) => b.edge.scale(-1, 1, 1));
+  const teethMat = glassMaterial({ opacity: 0.62, env: 2.8, roughness: 0.04, color: '#1A2C2C', side: THREE.DoubleSide, reflect: 5.5, sheen: 1 });
   const teeth = teethGeos.map((g) => {
     const m = new THREE.InstancedMesh(g, teethMat, total);
     m.count = 0;
     m.renderOrder = 2;
+    return m;
+  });
+  const edgeMat = new THREE.MeshBasicMaterial({ color: '#E8FFFF', transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false, toneMapped: false });
+  // In each hole, a soft dark rim just behind the glass line: the opening reads as an opening from across the street.
+  const holeTex = canvasTexture(
+    64,
+    96,
+    (g, w, h) => {
+      g.clearRect(0, 0, w, h);
+      const img = g.createImageData(w, h);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const dx = Math.abs(x / (w - 1) - 0.5) * 2;
+          const dy = Math.abs(y / (h - 1) - 0.5) * 2;
+          const r = Math.max(dx, dy * 0.92);
+          const a = Math.min(1, Math.max(0, (r - 0.35) / 0.65)) ** 1.6 * 0.75 + 0.12;
+          const k = (y * w + x) * 4;
+          img.data[k] = 18;
+          img.data[k + 1] = 14;
+          img.data[k + 2] = 20;
+          img.data[k + 3] = Math.round(a * 255);
+        }
+      }
+      g.putImageData(img, 0, 0);
+    },
+    false,
+  );
+  const holeMat = new THREE.MeshBasicMaterial({ map: holeTex, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  const holeGeo = new THREE.PlaneGeometry(PANE_W, PANE_H).translate(0, 0, -0.06);
+  const holes = new THREE.InstancedMesh(holeGeo, holeMat, total);
+  holes.count = 0;
+  holes.renderOrder = 1;
+  const edges = edgeGeos.map((g) => {
+    const m = new THREE.InstancedMesh(g, edgeMat, total);
+    m.count = 0;
+    m.renderOrder = 3;
     return m;
   });
   const crackMat = new THREE.MeshBasicMaterial({ map: crackTexture(), transparent: true, depthWrite: false, opacity: 0.9, color: '#ffffff' });
@@ -197,7 +277,7 @@ export function createGlass(field, scene, quality = 'medium') {
   cracks.count = 0;
   cracks.renderOrder = 3;
   const group = new THREE.Group();
-  group.add(panes, cracks, ...teeth);
+  group.add(panes, cracks, holes, ...teeth, ...edges);
   scene.add(group);
 
   // Each pane's place in the world.
@@ -236,30 +316,159 @@ export function createGlass(field, scene, quality = 'medium') {
   let dirty = false;
 
   // ---------------------------------------------------------------- shards
+  // Flying shards: slivers and chunks (one sliver stretched per shard) that flash as they leave, spin, catch the sun, bounce and
+  // skitter. Big pieces slide out of the frame whole and burst again where they land. Once still, a shard moves to the piles,
+  // which only grow until the round is swept.
   const cap = SHARDS[quality] ?? SHARDS.medium;
+  const pileCap = cap * 2;
   const shardGeo = new THREE.BufferGeometry();
-  shardGeo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0.12, 0, -0.07, -0.06, 0, 0.08, -0.08, 0], 3));
+  // A thin wedge with a bevelled edge, so it catches light edge-on too.
+  const sv0 = [
+    [0, 0.13, 0],
+    [-0.06, -0.07, 0],
+    [0.07, -0.08, 0],
+  ];
+  const T = 0.006;
+  const verts = [];
+  for (const z of [T, -T]) for (const v of sv0) verts.push(v[0], v[1], z);
+  const idx = [0, 1, 2, 5, 4, 3, 0, 3, 4, 0, 4, 1, 1, 4, 5, 1, 5, 2, 2, 5, 3, 2, 3, 0];
+  shardGeo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  shardGeo.setIndex(idx);
   shardGeo.computeVertexNormals();
-  const shardMat = new THREE.MeshStandardMaterial({ color: '#E8FAFA', metalness: 0.6, roughness: 0.06, envMapIntensity: 2.8, side: THREE.DoubleSide, emissive: new THREE.Color('#9FE0E2'), emissiveIntensity: 0.55, transparent: true, opacity: 0.9 });
+  const shardMat = new THREE.MeshStandardMaterial({ color: '#A9D8D6', metalness: 0.75, roughness: 0.03, envMapIntensity: 2.4, side: THREE.DoubleSide, emissive: new THREE.Color('#7FC9CC'), emissiveIntensity: 0.18, transparent: true, opacity: 0.78 });
+  // Lying in the grass: mostly see-through, a glint where the sun finds it.
+  const pileMat = new THREE.MeshStandardMaterial({ color: '#9CCBCB', metalness: 0.6, roughness: 0.04, envMapIntensity: 1.6, side: THREE.DoubleSide, transparent: true, opacity: 0.42, depthWrite: false });
   const shards = new THREE.InstancedMesh(shardGeo, shardMat, cap);
   shards.count = cap;
   shards.frustumCulled = false;
-  group.add(shards);
+  const flash = new THREE.Color();
+  for (let i = 0; i < cap; i++) shards.setColorAt(i, flash.setRGB(1, 1, 1));
+  const piles = new THREE.InstancedMesh(shardGeo, pileMat, pileCap);
+  piles.count = 0;
+  piles.frustumCulled = false;
+  group.add(shards, piles);
   const P = new Float32Array(cap * 3);
   const V = new Float32Array(cap * 3);
   const Rr = new Float32Array(cap * 3);
   const W = new Float32Array(cap * 3);
-  const Sz = new Float32Array(cap);
+  const Sx = new Float32Array(cap);
+  const Sy = new Float32Array(cap);
   const Fl = new Float32Array(cap);
   const life = new Float32Array(cap);
   const live = new Uint8Array(cap);
+  const bigOne = new Uint8Array(cap);
   let next = 0;
+  let pileNext = 0;
+  let pileCount = 0;
   for (let i = 0; i < cap; i++) shards.setMatrixAt(i, zero);
   shards.instanceMatrix.needsUpdate = true;
   const q = new THREE.Quaternion();
   const e = new THREE.Euler();
   const pv = new THREE.Vector3();
   const sv = new THREE.Vector3();
+
+  // Glitter: bright points that twinkle as they fall (additive, no depth write).
+  const GL = cap;
+  const gPos = new Float32Array(GL * 3);
+  const gVel = new Float32Array(GL * 3);
+  const gLife = new Float32Array(GL).fill(-1);
+  const gSeed = new Float32Array(GL);
+  const glitterGeo = new THREE.BufferGeometry();
+  glitterGeo.setAttribute('position', new THREE.BufferAttribute(gPos, 3));
+  glitterGeo.setAttribute('seed', new THREE.BufferAttribute(gSeed, 1));
+  glitterGeo.setAttribute('life', new THREE.BufferAttribute(gLife, 1));
+  const glitterMat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: { uTime: { value: 0 }, uScale: { value: 300 } },
+    vertexShader: `
+      attribute float seed;
+      attribute float life;
+      uniform float uTime;
+      uniform float uScale;
+      varying float vA;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        float tw = pow(abs(sin(uTime * (9.0 + seed * 7.0) + seed * 40.0)), 6.0);
+        vA = life < 0.0 ? 0.0 : clamp(1.0 - life / 1.4, 0.0, 1.0) * (0.25 + 0.75 * tw);
+        gl_PointSize = life < 0.0 ? 0.0 : uScale * (0.07 + 0.12 * tw) / -mv.z;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      varying float vA;
+      void main() {
+        vec2 c = gl_PointCoord - 0.5;
+        float star = max(0.0, 1.0 - (abs(c.x) * abs(c.y) * 60.0 + length(c) * 1.6));
+        float core = smoothstep(0.5, 0.0, length(c));
+        gl_FragColor = vec4(vec3(1.0, 0.98, 0.9) * (star + core * 0.6) * vA, 1.0);
+      }`,
+  });
+  const glitter = new THREE.Points(glitterGeo, glitterMat);
+  glitter.frustumCulled = false;
+  glitter.renderOrder = 5;
+  group.add(glitter);
+  let gNext = 0;
+  let gTime = 0;
+
+  function sparkle(x, y, z, n, spread, up) {
+    for (let k = 0; k < n; k++) {
+      const i = gNext;
+      gNext = (gNext + 1) % GL;
+      gPos[i * 3] = x + (Math.random() - 0.5) * spread;
+      gPos[i * 3 + 1] = y + (Math.random() - 0.5) * spread;
+      gPos[i * 3 + 2] = z + (Math.random() - 0.5) * spread;
+      gVel[i * 3] = (Math.random() - 0.5) * 3;
+      gVel[i * 3 + 1] = Math.random() * up;
+      gVel[i * 3 + 2] = (Math.random() - 0.5) * 3;
+      gLife[i] = Math.random() * 0.3;
+      gSeed[i] = Math.random();
+    }
+  }
+
+  /** Lands are where big pieces burst again and shards tinkle: main.js plays them. */
+  const lands = [];
+
+  function spawn(x, y, z, vx, vy, vz, sx, sy, big) {
+    const i = next;
+    next = (next + 1) % cap;
+    P[i * 3] = x;
+    P[i * 3 + 1] = y;
+    P[i * 3 + 2] = z;
+    V[i * 3] = vx;
+    V[i * 3 + 1] = vy;
+    V[i * 3 + 2] = vz;
+    Rr[i * 3] = Math.random() * 6;
+    Rr[i * 3 + 1] = Math.random() * 6;
+    Rr[i * 3 + 2] = Math.random() * 6;
+    const spin = big ? 2.5 : 24;
+    W[i * 3] = (Math.random() - 0.5) * spin;
+    W[i * 3 + 1] = (Math.random() - 0.5) * spin;
+    W[i * 3 + 2] = (Math.random() - 0.5) * spin;
+    Sx[i] = sx;
+    Sy[i] = sy;
+    Fl[i] = floorAt(x, z);
+    life[i] = 0;
+    live[i] = 1;
+    bigOne[i] = big ? 1 : 0;
+    return i;
+  }
+
+  function toPile(i) {
+    // Lies flat-ish where it fell, for good.
+    e.set(Math.PI / 2 + (Math.random() - 0.5) * 0.5, Rr[i * 3 + 1], (Math.random() - 0.5) * 0.5);
+    q.setFromEuler(e);
+    pv.set(P[i * 3], Fl[i] + 0.004, P[i * 3 + 2]);
+    sv.set(Sx[i] * 0.7, Sy[i] * 0.7, 1);
+    m.compose(pv, q, sv);
+    piles.setMatrixAt(pileNext, m);
+    pileNext = (pileNext + 1) % pileCap;
+    pileCount = Math.min(pileCap, pileCount + 1);
+    piles.count = pileCount;
+    piles.instanceMatrix.needsUpdate = true;
+    live[i] = 0;
+    shards.setMatrixAt(i, zero);
+  }
 
   function floorAt(x, z) {
     // Inside a house the floor is its plinth.
@@ -270,7 +479,7 @@ export function createGlass(field, scene, quality = 'medium') {
       const d = dx * h.fx + dz * h.fz;
       if (Math.abs(u) < HALF_W + 0.3 && d < 0.8 && d > -11) return h.elev + PLINTH + 0.01;
     }
-    return field.groundY(x, z) + 0.06;
+    return field.groundY(x, z) + 0.02;
   }
 
   const G = {
@@ -299,6 +508,7 @@ export function createGlass(field, scene, quality = 'medium') {
       dirty = false;
       const counts = [0, 0, 0];
       let nc = 0;
+      let nh = 0;
       for (let i = 0; i < total; i++) {
         const s = state[i];
         panes.setMatrixAt(i, s === BROKEN ? zero : paneM[i]);
@@ -310,58 +520,81 @@ export function createGlass(field, scene, quality = 'medium') {
           const v = variant[i];
           m.copy(paneM[i]);
           if ((i >> 1) % 2) m.multiply(flip);
+          edges[v].setMatrixAt(counts[v], m);
+          holes.setMatrixAt(nh++, paneM[i]);
           teeth[v].setMatrixAt(counts[v]++, m);
         }
       }
       cracks.count = nc;
+      holes.count = nh;
+      holes.instanceMatrix.needsUpdate = true;
       cracks.instanceMatrix.needsUpdate = true;
       for (let v = 0; v < 3; v++) {
         teeth[v].count = counts[v];
         teeth[v].instanceMatrix.needsUpdate = true;
+        edges[v].count = counts[v];
+        edges[v].instanceMatrix.needsUpdate = true;
       }
       panes.instanceMatrix.needsUpdate = true;
     },
 
-    /** A pane bursts: shards fly the way the stone was going, some back out onto the patio. */
-    burst(h, p, dir, big = 1) {
+    /**
+     * A pane bursts: shards fly the way the stone was going, some back out onto the patio, a big piece or two slides out whole,
+     * glitter hangs in the air. `far`: how far the camera is (far breaks throw bigger pieces, so they still read).
+     */
+    burst(h, p, dir, big = 1, far = 12) {
       const c = new THREE.Vector3().setFromMatrixPosition(paneM[h * PANES + p]);
       const house = field.houses[h];
-      const count = Math.round((24 + Math.random() * 14) * big * (cap < 200 ? 0.6 : 1));
+      const lowQ = cap < 300;
+      const count = Math.round((34 + Math.random() * 16) * big * (lowQ ? 0.5 : 1));
       const sp = Math.hypot(dir?.x ?? 0, dir?.y ?? 0, dir?.z ?? 0) || 1;
+      const dx = (dir?.x ?? -house.fx) / sp;
+      const dz = (dir?.z ?? -house.fz) / sp;
+      const grow = 1 + Math.min(1.2, Math.max(0, (far - 10) / 18));
       for (let k = 0; k < count; k++) {
-        const i = next;
-        next = (next + 1) % cap;
-        const back = Math.random() < 0.35;
-        const along = back ? -0.15 - Math.random() * 0.25 : 0.25 + Math.random() * 0.35;
-        P[i * 3] = c.x + house.rx * (Math.random() - 0.5) * PANE_W * 0.9;
-        P[i * 3 + 1] = c.y + (Math.random() - 0.5) * PANE_H * 0.9;
-        P[i * 3 + 2] = c.z + house.rz * (Math.random() - 0.5) * PANE_W * 0.9;
-        const vx = ((dir?.x ?? -house.fx) / sp) * 9 * along;
-        const vz = ((dir?.z ?? -house.fz) / sp) * 9 * along;
-        V[i * 3] = vx + house.fx * (back ? 2.5 : 0) + (Math.random() - 0.5) * 3.2;
-        V[i * 3 + 1] = Math.random() * 3.5 - 0.5;
-        V[i * 3 + 2] = vz + house.fz * (back ? 2.5 : 0) + (Math.random() - 0.5) * 3.2;
-        Rr[i * 3] = Math.random() * 6;
-        Rr[i * 3 + 1] = Math.random() * 6;
-        Rr[i * 3 + 2] = Math.random() * 6;
-        W[i * 3] = (Math.random() - 0.5) * 22;
-        W[i * 3 + 1] = (Math.random() - 0.5) * 22;
-        W[i * 3 + 2] = (Math.random() - 0.5) * 22;
-        Sz[i] = 0.5 + Math.random() * 1.6;
-        Fl[i] = floorAt(P[i * 3], P[i * 3 + 2]);
-        life[i] = 0;
-        live[i] = 1;
+        const back = Math.random() < 0.34;
+        const along = back ? -0.08 - Math.random() * 0.18 : 0.25 + Math.random() * 0.45;
+        const ox = (Math.random() - 0.5) * PANE_W * 0.95;
+        const oy = (Math.random() - 0.5) * PANE_H * 0.95;
+        const s = (0.3 + Math.random() * Math.random() * 1.3) * grow;
+        spawn(
+          c.x + house.rx * ox,
+          c.y + oy,
+          c.z + house.rz * ox,
+          dx * 10 * along + house.fx * (back ? 1.4 : 0) + (Math.random() - 0.5) * 2.6,
+          Math.random() * 3.4 - 0.8 + (back ? 1 : 0),
+          dz * 10 * along + house.fz * (back ? 1.4 : 0) + (Math.random() - 0.5) * 2.6,
+          s * (0.6 + Math.random() * 0.8),
+          s * (0.8 + Math.random() * 1.4),
+          false,
+        );
       }
+      // One or two big pieces that drop out of the frame and burst again below.
+      const nBig = lowQ ? 1 : 1 + (Math.random() < 0.5 ? 1 : 0);
+      for (let k = 0; k < nBig; k++) {
+        const ox = (Math.random() - 0.5) * PANE_W * 0.5;
+        const oy = (Math.random() - 0.1) * PANE_H * 0.4;
+        spawn(c.x + house.rx * ox, c.y + oy, c.z + house.rz * ox, house.fx * (0.3 + Math.random() * 0.6) + dx * 0.4, 0.3, house.fz * (0.3 + Math.random() * 0.6) + dz * 0.4, 3.4 + Math.random() * 1.5, 4 + Math.random() * 2, true);
+      }
+      sparkle(c.x + house.fx * 0.3, c.y, c.z + house.fz * 0.3, lowQ ? 14 : 30, PANE_W, 2.5);
     },
 
-    /** Moves the shards still in the air; settled ones stay where they fell. */
+    /** Big pieces that hit the ground since the last call: { x, y, z } (then cleared). */
+    lands,
+
+    /** Moves the shards still in the air; still ones go to the piles. */
     update(dt) {
       let moved = false;
+      gTime += dt;
+      glitterMat.uniforms.uTime.value = gTime;
       for (let i = 0; i < cap; i++) {
         if (live[i] !== 1) continue;
         moved = true;
         life[i] += dt;
         V[i * 3 + 1] -= 9.8 * dt;
+        // A little air: flat slivers drift.
+        V[i * 3] *= 1 - dt * 0.4;
+        V[i * 3 + 2] *= 1 - dt * 0.4;
         P[i * 3] += V[i * 3] * dt;
         P[i * 3 + 1] += V[i * 3 + 1] * dt;
         P[i * 3 + 2] += V[i * 3 + 2] * dt;
@@ -370,29 +603,77 @@ export function createGlass(field, scene, quality = 'medium') {
         Rr[i * 3 + 2] += W[i * 3 + 2] * dt;
         if (P[i * 3 + 1] <= Fl[i]) {
           P[i * 3 + 1] = Fl[i];
-          if (Math.abs(V[i * 3 + 1]) > 1.2) {
+          if (bigOne[i]) {
+            // The big piece bursts where it lands.
+            const x = P[i * 3];
+            const z = P[i * 3 + 2];
+            const y = Fl[i] + 0.05;
+            live[i] = 0;
+            shards.setMatrixAt(i, zero);
+            for (let k = 0; k < (cap < 300 ? 8 : 18); k++) {
+              const a = Math.random() * Math.PI * 2;
+              const v = 1 + Math.random() * 3;
+              const s2 = 0.35 + Math.random() * 0.8;
+              spawn(x, y, z, Math.cos(a) * v, 1 + Math.random() * 2.5, Math.sin(a) * v, s2 * 0.8, s2 * 1.2, false);
+            }
+            sparkle(x, y + 0.2, z, 10, 0.6, 2);
+            if (lands.length < 16) lands.push({ x, y, z });
+            continue;
+          }
+          if (Math.abs(V[i * 3 + 1]) > 1.1) {
             // A bounce and a skitter.
-            V[i * 3 + 1] *= -0.3;
-            V[i * 3] *= 0.5;
-            V[i * 3 + 2] *= 0.5;
-            W[i * 3] *= 0.4;
-            W[i * 3 + 2] *= 0.4;
+            V[i * 3 + 1] *= -0.28;
+            V[i * 3] *= 0.45;
+            V[i * 3 + 2] *= 0.45;
+            W[i * 3] *= 0.35;
+            W[i * 3 + 2] *= 0.35;
           } else {
-            // Lie flat-ish and stay.
-            live[i] = 2;
-            Rr[i * 3] = Math.PI / 2 + (Math.random() - 0.5) * 0.4;
-            Rr[i * 3 + 2] = (Math.random() - 0.5) * 0.4;
+            toPile(i);
+            continue;
           }
         }
-        if (life[i] > 6) live[i] = 2;
+        if (life[i] > 5) {
+          toPile(i);
+          continue;
+        }
         e.set(Rr[i * 3], Rr[i * 3 + 1], Rr[i * 3 + 2]);
         q.setFromEuler(e);
         pv.set(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]);
-        sv.setScalar(Sz[i]);
+        sv.set(Sx[i], Sy[i], 1);
         m.compose(pv, q, sv);
         shards.setMatrixAt(i, m);
+        // A white-hot flash as it leaves the frame, then glass.
+        const f = 1 + 2.6 * Math.exp(-life[i] * 9);
+        shards.setColorAt(i, flash.setRGB(f, f, f));
       }
-      if (moved) shards.instanceMatrix.needsUpdate = true;
+      if (moved) {
+        shards.instanceMatrix.needsUpdate = true;
+        if (shards.instanceColor) shards.instanceColor.needsUpdate = true;
+      }
+      let anyG = false;
+      for (let i = 0; i < GL; i++) {
+        if (gLife[i] < 0) continue;
+        anyG = true;
+        gLife[i] += dt;
+        if (gLife[i] > 1.4) {
+          gLife[i] = -1;
+          continue;
+        }
+        gVel[i * 3 + 1] -= 2.2 * dt;
+        gPos[i * 3] += gVel[i * 3] * dt;
+        gPos[i * 3 + 1] += gVel[i * 3 + 1] * dt;
+        gPos[i * 3 + 2] += gVel[i * 3 + 2] * dt;
+      }
+      if (anyG) {
+        glitterGeo.attributes.position.needsUpdate = true;
+        glitterGeo.attributes.life.needsUpdate = true;
+        glitterGeo.attributes.seed.needsUpdate = true;
+      }
+    },
+
+    /** Point size for the glitter, from the drawing buffer's height. */
+    setScale(px) {
+      glitterMat.uniforms.uScale.value = px;
     },
 
     /** A new round: every shard swept up. */
@@ -400,6 +681,11 @@ export function createGlass(field, scene, quality = 'medium') {
       live.fill(0);
       for (let i = 0; i < cap; i++) shards.setMatrixAt(i, zero);
       shards.instanceMatrix.needsUpdate = true;
+      pileCount = 0;
+      pileNext = 0;
+      piles.count = 0;
+      gLife.fill(-1);
+      lands.length = 0;
     },
 
     paneWorld(h, p, out) {
@@ -411,15 +697,26 @@ export function createGlass(field, scene, quality = 'medium') {
       paneGeo.dispose();
       shardGeo.dispose();
       for (const g of teethGeos) g.dispose();
+      for (const g of edgeGeos) g.dispose();
+      edgeMat.dispose();
+      holeGeo.dispose();
+      holeMat.dispose();
+      holeTex?.dispose();
+      holes.dispose();
+      for (const e of edges) e.dispose();
       paneMat.dispose();
       teethMat.dispose();
       crackMat.map?.dispose();
       smudge?.dispose();
       crackMat.dispose();
       shardMat.dispose();
+      pileMat.dispose();
       panes.dispose();
       cracks.dispose();
       shards.dispose();
+      piles.dispose();
+      glitterGeo.dispose();
+      glitterMat.dispose();
       for (const t of teeth) t.dispose();
     },
   };

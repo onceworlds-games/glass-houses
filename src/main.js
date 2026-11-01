@@ -510,10 +510,12 @@ async function boot() {
       }
       case 'break': {
         const dir = e.vx !== undefined ? { x: e.vx, y: e.vy, z: e.vz } : null;
-        for (const p of e.panes ?? []) W.glass.burst(e.house, p, dir, e.kind === 'brick' ? 1.25 : 1);
         if (e.panes?.length) {
           W.glass.paneWorld(e.house, e.panes[0], paneTmp);
           const s = spatial(paneTmp.x, paneTmp.y, paneTmp.z);
+          for (const p of e.panes) W.glass.burst(e.house, p, dir, e.kind === 'brick' ? 1.25 : 1, s.d);
+          // A flash at the pane: a break reads from across the street.
+          W.fx.glint(paneTmp.x, paneTmp.y, paneTmp.z, 1.6 + Math.min(2.4, s.d / 10));
           sound.shatter(s.d, s.pan, e.house === me, e.panes.length);
           if (breakLog && breakLog.length < 200) breakLog.push({ house: e.house, by: e.by, panes: e.panes.length, d: Math.round(s.d) });
           if (s.d < 9) trauma = Math.min(1, trauma + 0.12);

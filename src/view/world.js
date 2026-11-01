@@ -103,6 +103,7 @@ export function createWorld(stage) {
     st.store.set(R.storeOpen());
     st.update(dt, t / 1000, wind);
     W.fx.update(dt, t, wind);
+    W.glass.setScale((stage.height * stage.pixelRatio) / (2 * Math.tan((stage.camera.fov * Math.PI) / 360)));
     W.glass.update(dt);
   };
 
