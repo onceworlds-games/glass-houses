@@ -58,13 +58,55 @@ export function drawSymbol(ctx, symbol, x, y, s, fill) {
   ctx.restore();
 }
 
-/** Each street's light: sun, sky, fog, ground tints. */
+/** Each street's light: the sun, the painted sky and its clouds, fog, the fill, the grade. */
 export const LIGHTS = {
-  golden: { sun: '#FFC07A', sunI: 3.2, sunEl: 13, sunAz: 205, skyTop: '#6FA3C8', skyMid: '#F7C98E', skyLow: '#F4A86B', fog: '#F2C79A', hemiSky: '#FCD9AE', hemiGround: '#6F8F3A', hemiI: 1.15, ground: '#6F8F3A', sand: '#D9A86C', interior: '#FFC985', night: false },
-  sunset: { sun: '#FF8F5A', sunI: 2.8, sunEl: 7, sunAz: 245, skyTop: '#5A6FA8', skyMid: '#F59A7A', skyLow: '#F06A4E', fog: '#E89A80', hemiSky: '#F7B39A', hemiGround: '#5E7A33', hemiI: 1.0, ground: '#647F35', sand: '#C98D62', interior: '#FFB878', night: false },
-  afternoon: { sun: '#FFE0B0', sunI: 3.4, sunEl: 32, sunAz: 160, skyTop: '#5D9BD3', skyMid: '#A9D0EA', skyLow: '#F2DCC0', fog: '#E7D6BE', hemiSky: '#D8E8F2', hemiGround: '#6F8F3A', hemiI: 1.3, ground: '#73923C', sand: '#DDB27A', interior: '#FFD9A0', night: false },
-  haze: { sun: '#FFCF8A', sunI: 2.7, sunEl: 16, sunAz: 120, skyTop: '#88A9C2', skyMid: '#EBCB9E', skyLow: '#F1D4AE', fog: '#E9D1AF', hemiSky: '#F1DCC0', hemiGround: '#6A8A3A', hemiI: 1.2, ground: '#6E8C3C', sand: '#CFAE80', interior: '#FFCD8C', night: false },
-  night: { sun: '#9DB4FF', sunI: 1.0, sunEl: 35, sunAz: 140, skyTop: '#0E1030', skyMid: '#232250', skyLow: '#3B2E5E', fog: '#1E1C3E', hemiSky: '#4A4E92', hemiGround: '#26331C', hemiI: 0.85, ground: '#3A5124', sand: '#4D4052', interior: '#FFB760', night: true },
-  snow: { sun: '#F2F4FF', sunI: 1.6, sunEl: 20, sunAz: 190, skyTop: '#AFC0D2', skyMid: '#DCE3EA', skyLow: '#EEF0F2', fog: '#E2E7EC', hemiSky: '#F4F7FA', hemiGround: '#D9DEE4', hemiI: 1.5, ground: '#EEF1F4', sand: '#E4E8EC', interior: '#FFCB8A', night: false, snow: true },
-  dusk: { sun: '#FF9C6B', sunI: 2.3, sunEl: 5, sunAz: 260, skyTop: '#3B3F78', skyMid: '#C9708A', skyLow: '#F2925E', fog: '#C88778', hemiSky: '#D88E8A', hemiGround: '#5B5A32', hemiI: 0.95, ground: '#7A6A3A', sand: '#B8714A', interior: '#FFB070', night: false },
+  golden: {
+    sun: '#FFB46E', sunI: 3.3, sunEl: 11, sunAz: 205, sunSize: 0.04,
+    skyTop: '#3569B0', skyMid: '#9FB8D2', skyLow: '#FFD3A4', glow: '#FF9A55', glowI: 0.6, cloudLit: '#FFE2C2', cloudShade: '#A88CA6', cover: 0.36,
+    fog: '#EBD2B8', fogNear: 3.2, fogFar: 16, hemiSky: '#D9E2EE', hemiGround: '#8C8A50', hemiI: 0.9, exposure: 1.0,
+    lift: '#2A3478', gain: '#FFEFD8', sat: 1.12, vignette: 0.3, bloom: 0.34, bloomAt: 0.9,
+    ground: '#7C9A44', sand: '#DDC39C', interior: '#FFC985', night: false,
+  },
+  sunset: {
+    sun: '#FF8452', sunI: 3.0, sunEl: 6, sunAz: 245, sunSize: 0.05,
+    skyTop: '#3E4C8C', skyMid: '#E98C7C', skyLow: '#FF8C52', glow: '#FF6438', glowI: 0.7, cloudLit: '#FFB490', cloudShade: '#86587E', cover: 0.48,
+    fog: '#E8957E', fogNear: 2.4, fogFar: 11, hemiSky: '#F7AE98', hemiGround: '#5E7A33', hemiI: 0.85, exposure: 1.02,
+    lift: '#3A2266', gain: '#FFE2CC', sat: 1.12, vignette: 0.34, bloom: 0.4, bloomAt: 0.88,
+    ground: '#6A8238', sand: '#C98D62', interior: '#FFB878', night: false,
+  },
+  afternoon: {
+    sun: '#FFF0D6', sunI: 3.5, sunEl: 38, sunAz: 160, sunSize: 0.032,
+    skyTop: '#3A84D6', skyMid: '#8EC2EA', skyLow: '#E4EEF0', glow: '#FFF6E8', glowI: 0.18, cloudLit: '#FFFFFF', cloudShade: '#A9B9D2', cover: 0.42,
+    fog: '#DCE7EC', fogNear: 2.8, fogFar: 13, hemiSky: '#D8EAF6', hemiGround: '#728F3E', hemiI: 1.1, exposure: 0.98,
+    lift: '#20306A', gain: '#FFF8EE', sat: 1.08, vignette: 0.24, bloom: 0.25, bloomAt: 0.95,
+    ground: '#76953E', sand: '#DDB27A', interior: '#FFD9A0', night: false,
+  },
+  haze: {
+    sun: '#FFD08C', sunI: 2.9, sunEl: 17, sunAz: 120, sunSize: 0.04,
+    skyTop: '#7A9DC2', skyMid: '#E8CEA8', skyLow: '#F5DDBA', glow: '#FFC07A', glowI: 0.45, cloudLit: '#FFF0DC', cloudShade: '#B9A2A6', cover: 0.24,
+    fog: '#EBD3B2', fogNear: 2.2, fogFar: 10, hemiSky: '#F1DCC0', hemiGround: '#6A8A3A', hemiI: 1.05, exposure: 1.0,
+    lift: '#33306A', gain: '#FFF0DE', sat: 1.06, vignette: 0.28, bloom: 0.3, bloomAt: 0.92,
+    ground: '#6E8C3C', sand: '#CFAE80', interior: '#FFCD8C', night: false,
+  },
+  night: {
+    sun: '#A9BEFF', sunI: 0.95, sunEl: 40, sunAz: 140, sunSize: 0.03,
+    skyTop: '#0A0D2A', skyMid: '#1C1F4E', skyLow: '#3A2C5E', glow: '#6A3E8E', glowI: 0.4, cloudLit: '#4C4F86', cloudShade: '#191A38', cover: 0.22,
+    fog: '#1F1C40', fogNear: 2.2, fogFar: 10, hemiSky: '#4B52A4', hemiGround: '#22301A', hemiI: 0.75, exposure: 1.3,
+    lift: '#1A2A70', gain: '#FFE8C8', sat: 1.12, vignette: 0.4, bloom: 0.65, bloomAt: 0.78,
+    ground: '#3A5124', sand: '#4D4052', interior: '#FFB760', night: true,
+  },
+  snow: {
+    sun: '#F4F6FF', sunI: 1.5, sunEl: 22, sunAz: 190, sunSize: 0.03,
+    skyTop: '#9AB0C8', skyMid: '#D3DCE6', skyLow: '#EEF1F4', glow: '#FFFFFF', glowI: 0.15, cloudLit: '#FFFFFF', cloudShade: '#B6C0CE', cover: 0.75,
+    fog: '#E2E7EC', fogNear: 1.6, fogFar: 7, hemiSky: '#F4F7FA', hemiGround: '#D9DEE4', hemiI: 1.35, exposure: 0.86,
+    lift: '#2A3A6A', gain: '#F6F8FF', sat: 1.0, vignette: 0.26, bloom: 0.25, bloomAt: 0.96,
+    ground: '#EEF1F4', sand: '#E4E8EC', interior: '#FFCB8A', night: false, snow: true,
+  },
+  dusk: {
+    sun: '#FF7A5A', sunI: 2.5, sunEl: 4, sunAz: 260, sunSize: 0.055,
+    skyTop: '#28306C', skyMid: '#B3648C', skyLow: '#F28A5C', glow: '#FF5A40', glowI: 0.65, cloudLit: '#FF9E7C', cloudShade: '#5A3A6C', cover: 0.44,
+    fog: '#C5847C', fogNear: 2.2, fogFar: 10, hemiSky: '#D88E8A', hemiGround: '#5B5A32', hemiI: 0.85, exposure: 1.05,
+    lift: '#36206C', gain: '#FFDCC8', sat: 1.12, vignette: 0.36, bloom: 0.45, bloomAt: 0.86,
+    ground: '#7A6A3A', sand: '#B8714A', interior: '#FFB070', night: false,
+  },
 };

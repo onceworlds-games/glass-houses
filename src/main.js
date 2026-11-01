@@ -1055,7 +1055,7 @@ async function boot() {
     }
 
     hud(R, me, phase, match, now, firstP);
-    stage.render();
+    stage.render(now / 1000);
   }
 
   // ------------------------------------------------------------------ the HUD for this moment

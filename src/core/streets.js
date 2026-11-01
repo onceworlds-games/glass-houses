@@ -1,6 +1,8 @@
 // The eight streets: where the houses stand, what is in the middle, the light, the wind and who lives there.
 // Every layout faces one centre point, so every lawn can reach every house.
 
+import { houseStyle } from './houses.js';
+
 export const STREETS = [
   {
     id: 'palm-court', name: 'Palm Court', R: 22, spread: 360, rot: 90, elev: [0, 0, 0, 0, 0, 0], centre: 'oak', light: 'golden',
@@ -127,6 +129,8 @@ export function buildField(index) {
       lawn: { rMin, rMax, aMin: a - step / 2 + margin, aMax: a + step / 2 - margin, angle: a },
       // Where its owner stands at the start: the middle of the lawn.
       spawn: { x: rMid * Math.cos(a), z: rMid * Math.sin(a) },
+      // Its roof, walls and side yard (roofs and carports are solid).
+      style: houseStyle(STREETS.indexOf(street), i),
     });
   }
   const spots = [];

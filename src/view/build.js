@@ -10,20 +10,31 @@ export function createBuilder() {
   const groups = new Map();
   const B = {};
 
-  /** Adds a geometry (consumed), placed by `matrix`, in one colour (or per-vertex colours it already has), under a material key. */
-  B.add = function add(key, geo, matrix, color) {
+  /**
+   * Adds a geometry (consumed), placed by `matrix`, in one colour (or per-vertex colours it already has), under a material key.
+   * `sway` (0..1, or a function of the vertex's local height) is how much the wind moves it: palms, fronds, flags of leaves.
+   */
+  B.add = function add(key, geo, matrix, color, sway = 0) {
     let g = geo.index ? geo.toNonIndexed() : geo;
     if (g !== geo) geo.dispose();
+    const n = g.attributes.position.count;
+    if (!g.attributes.sway) {
+      const w = new Float32Array(n);
+      if (typeof sway === 'function') {
+        const p = g.attributes.position;
+        for (let i = 0; i < n; i++) w[i] = sway(p.getY(i), p.getX(i), p.getZ(i));
+      } else if (sway) w.fill(sway);
+      g.setAttribute('sway', new THREE.BufferAttribute(w, 1));
+    }
     if (matrix) {
       g.applyMatrix4(matrix);
       // A mirroring matrix (a house frame is one) turns triangles inside out: wind them back.
       if (matrix.determinant() < 0) flipWinding(g);
     }
-    if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array((g.attributes.position.count) * 2), 2));
+    if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
     if (!g.attributes.normal) g.computeVertexNormals();
     if (color !== undefined && color !== null) {
       tmpColor.set(color);
-      const n = g.attributes.position.count;
       const c = new Float32Array(n * 3);
       for (let i = 0; i < n; i++) {
         c[i * 3] = tmpColor.r;
@@ -32,10 +43,9 @@ export function createBuilder() {
       }
       g.setAttribute('color', new THREE.BufferAttribute(c, 3));
     } else if (!g.attributes.color) {
-      const n = g.attributes.position.count;
       g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
     }
-    for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(name)) g.deleteAttribute(name);
+    for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'color', 'sway'].includes(name)) g.deleteAttribute(name);
     let list = groups.get(key);
     if (!list) groups.set(key, (list = []));
     list.push(g);
@@ -43,11 +53,19 @@ export function createBuilder() {
   };
 
   /** A box of w × h × d with its centre at (x, y, z) in `frame` (a matrix), UVs in metres / `uvScale`. */
-  B.box = function box(key, frame, w, h, d, x, y, z, color, uvScale = 0) {
+  B.box = function box(key, frame, w, h, d, x, y, z, color, uvScale = 0, sway = 0) {
     const g = new THREE.BoxGeometry(w, h, d);
     if (uvScale > 0) scaleBoxUV(g, w, h, d, uvScale);
     g.translate(x, y, z);
-    return B.add(key, g, frame, color);
+    return B.add(key, g, frame, color, sway);
+  };
+
+  /** A view of this builder that stamps every piece with `tag` in its sway slot (interiors use it as the house's number). */
+  B.tagged = function tagged(tag) {
+    return {
+      add: (key, g, M, color) => B.add(key, g, M, color, tag),
+      box: (key, frame, w, h, d, x, y, z, color, uvScale = 0) => B.box(key, frame, w, h, d, x, y, z, color, uvScale, tag),
+    };
   };
 
   /** Makes one mesh per material key. `materials`: { key: material }. */
@@ -130,7 +148,7 @@ export function sectorGeometry(r0, r1, a0, a1, y, segR, segA, colorAt) {
     pos.push(r * Math.cos(a), y, r * Math.sin(a));
     c.set(colorAt(r, a));
     col.push(c.r, c.g, c.b);
-    uv.push((r * Math.cos(a)) / 4, (r * Math.sin(a)) / 4);
+    uv.push(r * Math.cos(a), r * Math.sin(a));
   };
   for (let i = 0; i < segR; i++) {
     const ra = r0 + ((r1 - r0) * i) / segR;
@@ -164,10 +182,10 @@ export function arcWallGeometry(r, a0, a1, y0, y1, seg) {
     const ab = a0 + ((a1 - a0) * (j + 1)) / seg;
     const A = [r * Math.cos(aa), r * Math.sin(aa)];
     const Bp = [r * Math.cos(ab), r * Math.sin(ab)];
-    const ua = (r * aa) / 2;
-    const ub = (r * ab) / 2;
+    const ua = r * aa;
+    const ub = r * ab;
     pos.push(A[0], y0, A[1], Bp[0], y1, Bp[1], Bp[0], y0, Bp[1], A[0], y0, A[1], A[0], y1, A[1], Bp[0], y1, Bp[1]);
-    uv.push(ua, y0 / 2, ub, y1 / 2, ub, y0 / 2, ua, y0 / 2, ua, y1 / 2, ub, y1 / 2);
+    uv.push(ua, y0, ub, y1, ub, y0, ua, y0, ua, y1, ub, y1);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));

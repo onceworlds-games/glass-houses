@@ -50,6 +50,9 @@ export function createWorld(stage) {
     const light = STREETS[i].light;
     stage.setLight(light, W.field.R);
     W.fx.setField(W.field, light === 'snow');
+    // The street itself into every pane's reflection: the houses across, the palms, the sky.
+    W.street.update(0, 0, { x: 1, z: 0, s: 0.5 });
+    stage.captureStreet([W.glass.group, W.fx.group, ...W.figures.flatMap((f) => [f.root, f.ghost])]);
     return true;
   };
 

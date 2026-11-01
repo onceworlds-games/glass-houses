@@ -1,50 +1,62 @@
-// The renderer, the camera, the sky and the light. One per page; the street is swapped inside it.
+// The renderer, the camera, the sky, the light and the picture's finish. One per page; the street is swapped inside it.
+// Quality: low draws straight to the screen (no shadows, no post); medium adds soft shadows, a bloom on what shines and the grade;
+// high adds ambient occlusion and bigger shadow maps.
 
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { LIGHTS } from './palette.js';
+import { skyMaterial, paintSky } from './sky.js';
 
 const SHADOW = { low: 0, medium: 1024, high: 2048 };
 
-function skyMaterial() {
-  return new THREE.ShaderMaterial({
-    side: THREE.BackSide,
-    depthWrite: false,
-    fog: false,
-    uniforms: {
-      top: { value: new THREE.Color() },
-      mid: { value: new THREE.Color() },
-      low: { value: new THREE.Color() },
-      sunDir: { value: new THREE.Vector3(0, 0.2, -1) },
-      sunCol: { value: new THREE.Color() },
-      night: { value: 0 },
-    },
-    vertexShader: `
-      varying vec3 vDir;
-      void main() {
-        vDir = normalize(position);
-        vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        gl_Position = p.xyww;
-      }`,
-    fragmentShader: `
-      uniform vec3 top; uniform vec3 mid; uniform vec3 low; uniform vec3 sunDir; uniform vec3 sunCol; uniform float night;
-      varying vec3 vDir;
-      float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 45.164))) * 43758.5453); }
-      void main() {
-        vec3 d = normalize(vDir);
-        float h = d.y;
-        vec3 c = mix(low, mid, smoothstep(-0.02, 0.18, h));
-        c = mix(c, top, smoothstep(0.15, 0.75, h));
-        float s = max(dot(d, normalize(sunDir)), 0.0);
-        c += sunCol * (pow(s, 900.0) * 6.0 + pow(s, 24.0) * 0.35 + pow(s, 4.0) * 0.12) * (1.0 - night * 0.7);
-        if (night > 0.5 && h > 0.05) {
-          vec3 q = floor(d * 380.0);
-          float st = step(0.9965, hash(q));
-          c += vec3(st) * 0.9 * smoothstep(0.05, 0.4, h);
-        }
-        gl_FragColor = vec4(c, 1.0);
-      }`,
-  });
-}
+/** The finish: a warm-cool split grade, a soft vignette, and the moment's punch (a flash, a red edge when you're hurt). */
+const GradeShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    lift: { value: new THREE.Color('#2a2050') },
+    gain: { value: new THREE.Color('#fff4e6') },
+    sat: { value: 1.08 },
+    vignette: { value: 0.32 },
+    flash: { value: 0 },
+    flashCol: { value: new THREE.Color('#ffffff') },
+    hurt: { value: 0 },
+    aspect: { value: 1.78 },
+  },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform vec3 lift;
+    uniform vec3 gain;
+    uniform float sat;
+    uniform float vignette;
+    uniform float flash;
+    uniform vec3 flashCol;
+    uniform float hurt;
+    uniform float aspect;
+    varying vec2 vUv;
+    void main() {
+      vec4 t = texture2D(tDiffuse, vUv);
+      vec3 c = t.rgb;
+      float l = dot(c, vec3(0.299, 0.587, 0.114));
+      // Shadows lean toward the lift colour, highlights toward the gain.
+      c += lift * 0.07 * (1.0 - smoothstep(0.0, 0.45, l));
+      c = mix(c, c * gain, smoothstep(0.3, 0.95, l));
+      c = mix(vec3(l), c, sat - hurt * 0.4);
+      vec2 q = (vUv - 0.5) * vec2(aspect, 1.0);
+      float v = smoothstep(0.5, 1.3, length(q) * 1.05);
+      c *= 1.0 - v * vignette;
+      c = mix(c, vec3(0.72, 0.1, 0.06), hurt * smoothstep(0.38, 1.05, length(q)) * 0.6);
+      c = mix(c, flashCol, flash);
+      gl_FragColor = vec4(c, t.a);
+    }`,
+};
 
 export function createStage(canvas, opts = {}) {
   let renderer;
@@ -61,6 +73,7 @@ export function createStage(canvas, opts = {}) {
   } catch {
     /* unknown: assume a graphics chip */
   }
+  const webgl2 = renderer.capabilities.isWebGL2;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
@@ -68,11 +81,11 @@ export function createStage(canvas, opts = {}) {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(70, 1, 0.08, 900);
+  const camera = new THREE.PerspectiveCamera(70, 1, 0.06, 1400);
   camera.rotation.order = 'YXZ';
   scene.add(camera);
 
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(600, 32, 16), skyMaterial());
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(1000, 48, 24), skyMaterial());
   sky.frustumCulled = false;
   sky.renderOrder = -10;
   scene.add(sky);
@@ -81,14 +94,16 @@ export function createStage(canvas, opts = {}) {
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xffffff, 3);
   sun.castShadow = true;
-  sun.shadow.bias = -0.0004;
-  sun.shadow.normalBias = 0.04;
+  sun.shadow.bias = -0.0003;
+  sun.shadow.normalBias = 0.035;
+  sun.shadow.radius = 3;
   scene.add(sun);
   scene.add(sun.target);
   scene.fog = new THREE.Fog(0xffffff, 60, 260);
 
   const pmrem = new THREE.PMREMGenerator(renderer);
   let envRT = null;
+  let cubeRT = null;
 
   const S = {
     software,
@@ -103,9 +118,78 @@ export function createStage(canvas, opts = {}) {
     sunDir: new THREE.Vector3(),
     width: 1,
     height: 1,
+    pixelRatio: 1,
+    /** The moment's punch, eased back by the page: 0..1. */
+    flash: 0,
+    flashColor: new THREE.Color('#ffffff'),
+    hurt: 0,
+    composer: null,
+    envMap: null,
   };
 
-  /** Points the sun and paints the sky for a street's light; bakes the sky into the reflections glass uses. */
+  // ---------------------------------------------------------------- the picture's finish
+  let composer = null;
+  let bloom = null;
+  let gtao = null;
+  let grade = null;
+  function buildPost() {
+    if (composer) {
+      composer.renderTarget1?.dispose?.();
+      composer.renderTarget2?.dispose?.();
+      gtao?.dispose?.();
+      bloom?.dispose?.();
+    }
+    composer = null;
+    bloom = null;
+    gtao = null;
+    grade = null;
+    S.composer = null;
+    if (S.quality === 'low' || software || opts.noPost) return;
+    const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: webgl2 ? 4 : 0 });
+    composer = new EffectComposer(renderer, rt);
+    composer.addPass(new RenderPass(scene, camera));
+    if (S.quality === 'high' && webgl2 && !opts.noAO) {
+      try {
+        gtao = new GTAOPass(scene, camera, 4, 4);
+        gtao.output = GTAOPass.OUTPUT.Default;
+        gtao.blendIntensity = 0.8;
+        gtao.updateGtaoMaterial({ radius: 0.7, distanceExponent: 1.5, thickness: 1.4, scale: 1.0, samples: 12 });
+        gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 5, rings: 2, samples: 10 });
+        composer.addPass(gtao);
+      } catch {
+        gtao = null;
+      }
+    }
+    bloom = new UnrealBloomPass(new THREE.Vector2(4, 4), 0.32, 0.55, 0.92);
+    composer.addPass(bloom);
+    composer.addPass(new OutputPass());
+    grade = new ShaderPass(GradeShader);
+    composer.addPass(grade);
+    S.composer = composer;
+    applyGrade();
+    if (S.width > 1) sizePost();
+  }
+  function sizePost() {
+    if (!composer) return;
+    composer.setPixelRatio(S.pixelRatio);
+    composer.setSize(S.width, S.height);
+    if (bloom) bloom.resolution.set(Math.round(S.width * S.pixelRatio * 0.5), Math.round(S.height * S.pixelRatio * 0.5));
+    if (grade) grade.uniforms.aspect.value = S.width / S.height;
+  }
+  function applyGrade() {
+    if (!grade) return;
+    const L = S.light;
+    grade.uniforms.lift.value.set(L.lift ?? '#2a2050');
+    grade.uniforms.gain.value.set(L.gain ?? '#fff1e0');
+    grade.uniforms.sat.value = L.sat ?? 1.08;
+    grade.uniforms.vignette.value = L.vignette ?? 0.3;
+    if (bloom) {
+      bloom.strength = L.bloom ?? 0.32;
+      bloom.threshold = L.bloomAt ?? 0.92;
+    }
+  }
+
+  /** Points the sun and paints the sky for a street's light. */
   S.setLight = function setLight(name, radius = 22) {
     const L = LIGHTS[name] ?? LIGHTS.golden;
     S.light = L;
@@ -114,58 +198,87 @@ export function createStage(canvas, opts = {}) {
     S.sunDir.set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az));
     sun.color.set(L.sun);
     sun.intensity = L.sunI;
-    sun.position.copy(S.sunDir).multiplyScalar(90);
+    // The shadow light stays at least 16° up, so the long evening shadows stay inside the map.
+    const sel = Math.max(el, (16 * Math.PI) / 180);
+    sun.position.set(Math.cos(sel) * Math.sin(az), Math.sin(sel), Math.cos(sel) * Math.cos(az)).multiplyScalar(110);
     sun.target.position.set(0, 0, 0);
-    const span = radius + 18;
+    const span = radius + 17;
     const cam = sun.shadow.camera;
     cam.left = -span;
     cam.right = span;
     cam.top = span;
     cam.bottom = -span;
-    cam.near = 10;
+    cam.near = 30;
     cam.far = 220;
     cam.updateProjectionMatrix();
     hemi.color.set(L.hemiSky);
     hemi.groundColor.set(L.hemiGround);
     hemi.intensity = L.hemiI;
-    const u = sky.material.uniforms;
-    u.top.value.set(L.skyTop);
-    u.mid.value.set(L.skyMid);
-    u.low.value.set(L.skyLow);
-    u.sunDir.value.copy(S.sunDir);
-    u.sunCol.value.set(L.sun);
-    u.night.value = L.night ? 1 : 0;
-    // The far ground fades into the sky at the horizon.
-    scene.fog.color.set(L.fog).lerp(new THREE.Color(L.skyLow), 0.65);
-    scene.fog.near = radius * 2.2;
-    scene.fog.far = radius * 9;
-    renderer.toneMappingExposure = L.night ? 1.25 : L.snow ? 0.82 : 1.0;
-    bakeEnv();
+    paintSky(sky.material, L, S.sunDir);
+    scene.fog.color.set(L.fog);
+    scene.fog.near = radius * (L.fogNear ?? 2.4);
+    scene.fog.far = radius * (L.fogFar ?? 11);
+    renderer.toneMappingExposure = L.exposure ?? 1.0;
+    applyGrade();
+    bakeSky();
   };
 
-  function bakeEnv() {
-    // The sky alone, as the reflections in the glass: whole panes flash gold when they face the sun.
+  /** The sky alone as the light that fills shadows and the first reflections (before the street is captured). */
+  function bakeSky() {
     const envScene = new THREE.Scene();
     const s2 = new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), sky.material);
     envScene.add(s2);
-    // A warm band of the street's ground and the houses opposite, so low reflections aren't empty sky.
     const band = new THREE.Mesh(
       new THREE.CylinderGeometry(90, 90, 14, 32, 1, true),
-      new THREE.MeshBasicMaterial({ color: new THREE.Color(S.light.sand).multiplyScalar(0.55), side: THREE.BackSide }),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(S.light.sand).multiplyScalar(0.5), side: THREE.BackSide }),
     );
     band.position.y = -4;
     envScene.add(band);
     if (envRT) envRT.dispose();
     envRT = pmrem.fromScene(envScene, 0.02);
     scene.environment = envRT.texture;
+    S.envMap = envRT.texture;
     s2.geometry.dispose();
     band.geometry.dispose();
     band.material.dispose();
   }
 
+  /**
+   * Bakes the street itself into the reflections: a cube from the middle of the green, a few metres up, with `hide` (the glass,
+   * the people) hidden. Every pane then mirrors the houses across the street, the palms and the sky.
+   */
+  S.captureStreet = function captureStreet(hide = [], y = 3.2) {
+    try {
+      if (!cubeRT) cubeRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType });
+      const cubeCam = new THREE.CubeCamera(1, 1200, cubeRT);
+      cubeCam.position.set(0, y, 0);
+      scene.add(cubeCam);
+      const was = hide.map((o) => o.visible);
+      for (const o of hide) o.visible = false;
+      const fog = scene.fog;
+      scene.fog = null;
+      sky.position.set(0, y, 0);
+      const tm = renderer.toneMapping;
+      cubeCam.update(renderer, scene);
+      renderer.toneMapping = tm;
+      scene.fog = fog;
+      scene.remove(cubeCam);
+      hide.forEach((o, i) => (o.visible = was[i]));
+      const next = pmrem.fromCubemap(cubeRT.texture);
+      if (envRT) envRT.dispose();
+      envRT = next;
+      scene.environment = next.texture;
+      S.envMap = next.texture;
+      return next.texture;
+    } catch (err) {
+      console.warn('[glass-houses] street capture', err);
+      return S.envMap;
+    }
+  };
+
   S.setQuality = function setQuality(q) {
     S.quality = q;
-    const size = SHADOW[q] ?? 1024;
+    const size = software ? 0 : SHADOW[q] ?? 1024;
     renderer.shadowMap.enabled = size > 0;
     sun.castShadow = size > 0;
     if (size > 0 && sun.shadow.mapSize.x !== size) {
@@ -181,24 +294,45 @@ export function createStage(canvas, opts = {}) {
         for (const m of ms) m.needsUpdate = true;
       }
     });
+    buildPost();
   };
 
   S.resize = function resize(w, h, pixelRatio) {
     S.width = Math.max(1, w);
     S.height = Math.max(1, h);
+    S.pixelRatio = pixelRatio;
     renderer.setPixelRatio(pixelRatio);
     renderer.setSize(S.width, S.height, false);
     camera.aspect = S.width / S.height;
-    // Portrait keeps the sideways view wide enough to see the street.
-    const hfov = 78;
-    const vfovForH = (2 * Math.atan(Math.tan((hfov * Math.PI) / 360) / camera.aspect) * 180) / Math.PI;
-    camera.fov = Math.min(100, Math.max(62, camera.aspect < 1.2 ? vfovForH : 66));
-    camera.updateProjectionMatrix();
+    S.setFov(S.fovNow ?? 66);
+    sizePost();
   };
 
-  S.render = function render() {
+  /** The vertical field of view (66° is the game's view), widened in portrait so the street still fits sideways. */
+  S.fovNow = 66;
+  S.setFov = function setFov(vfov) {
+    S.fovNow = vfov;
+    const hfov = 78 * (vfov / 66);
+    const vfovForH = (2 * Math.atan(Math.tan((hfov * Math.PI) / 360) / camera.aspect) * 180) / Math.PI;
+    const f = camera.aspect < 1.2 ? Math.max(vfov, vfovForH) : vfov;
+    const next = Math.min(105, Math.max(14, f));
+    if (Math.abs(camera.fov - next) > 1e-3) {
+      camera.fov = next;
+      camera.updateProjectionMatrix();
+    }
+  };
+
+  S.render = function render(time = 0) {
     sky.position.copy(camera.position);
-    renderer.render(scene, camera);
+    sky.material.uniforms.time.value = time;
+    if (composer) {
+      if (grade) {
+        grade.uniforms.flash.value = S.flash;
+        grade.uniforms.flashCol.value.copy(S.flashColor);
+        grade.uniforms.hurt.value = S.hurt;
+      }
+      composer.render();
+    } else renderer.render(scene, camera);
   };
 
   S.setQuality(S.quality);

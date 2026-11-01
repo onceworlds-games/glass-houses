@@ -32,12 +32,12 @@ export async function runPoster(params) {
   const stage = createStage(canvas, { preserve: true, quality: 'high' });
   stage.resize(w, h, 1);
   const W = createWorld(stage);
-  const stages = { cover, action, win, multi, icon };
+  const stages = { cover, action, win, multi, icon, look };
   const run = stages[name] ?? cover;
-  run(stage, W, w, h);
-  stage.render();
+  run(stage, W, w, h, params);
+  stage.render(12);
   await frame();
-  stage.render();
+  stage.render(12);
   await frame();
   document.body.dataset.ready = '1';
 }
@@ -275,6 +275,56 @@ function icon(stage, W) {
   if (s) inbound(s, cam, paneCentre(hh, 3, {}), Math.hypot(look.x - cam.x, look.z - cam.z) - 4.5);
   draw(W, R);
   lookFrom(stage, cam.x, cam.y, cam.z, look.x, look.y, look.z, 58);
+}
+
+/**
+ * Any view of any street, for looking at the art: ?poster=look&street=0&house=2&dist=14&side=3&up=2 (a house from its lawn), or
+ * &cam=x,y,z&at=x,y,z; &fov=60, &broken=n (panes out per house), &ms=round time.
+ */
+function look(stage, W, w, h, params) {
+  const street = Number(params.get('street') ?? 0);
+  const R = round(street, 4242, Number(params.get('ms') ?? 20000));
+  setup(W, R);
+  W.me = -1;
+  const nb = Number(params.get('broken') ?? 3);
+  for (let i = 0; i < 6; i++) {
+    const br = [];
+    for (let p = 0; p < PANES && br.length < nb; p++) if ((p * 7 + i * 5) % 9 === 0) br.push(p);
+    setPanes(R, i, br);
+  }
+  const out = (params.get('out') ?? '').split(',').filter(Boolean).map(Number);
+  for (const i of out) {
+    R.houses[i].panes.fill(BROKEN);
+    R.houses[i].outAt = 1000;
+  }
+  draw(W, R);
+  for (let k = 0; k < 40; k++) W.street.update(0.05, 12 + k * 0.05, R.windNow());
+  if (params.get('glass') === 'mirror') {
+    W.glass.group.traverse((o) => {
+      if (o.material?.envMapIntensity !== undefined) {
+        o.material.opacity = 1;
+        o.material.roughness = 0;
+        o.material.roughnessMap = null;
+        o.material.metalness = 1;
+        o.material.color.set('#ffffff');
+        o.material.needsUpdate = true;
+      }
+    });
+  }
+  const v = (k) => (params.get(k) ?? '').split(',').map(Number);
+  if (params.get('cam')) {
+    const c = v('cam');
+    const a = v('at');
+    lookFrom(stage, c[0], c[1], c[2], a[0], a[1], a[2], Number(params.get('fov') ?? 60));
+  } else {
+    const hh = R.field.houses[Number(params.get('house') ?? 1)];
+    const d = Number(params.get('dist') ?? 16);
+    const sd = Number(params.get('side') ?? 0);
+    const up = Number(params.get('up') ?? 1.7);
+    lookFrom(stage, hh.cx + hh.fx * d + hh.rx * sd, hh.elev + up, hh.cz + hh.fz * d + hh.rz * sd, hh.cx + hh.rx * sd * 0.3, hh.elev + Number(params.get('aty') ?? 3), hh.cz + hh.rz * sd * 0.3, Number(params.get('fov') ?? 60));
+  }
+  void w;
+  void h;
 }
 
 // ------------------------------------------------------------------ badges: a bold symbol on a coloured disc

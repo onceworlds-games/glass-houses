@@ -6,6 +6,7 @@ import {
   BODY_R, BODY_TOP, BODY_BOTTOM, GHOST_R, GHOST_Y, speedOf, STORE_CLOSE_MS, WIND_ROUND1, WIND_LATE,
 } from './config.js';
 import { hash, createRng } from './rng.js';
+import { hitStyle } from './houses.js';
 
 const CELL_U = PANE_W + MULLION;
 const CELL_Y = PANE_H + MULLION;
@@ -146,8 +147,11 @@ function hitStatic(field, x, y, z, r) {
 
 /** A house's solid parts (not its glass): the body behind the facade, the plinth step, the roof slab, the mailbox wall. */
 function hitHouseSolid(h, u, d, yl, r, inside) {
-  // The roof slab and its cantilever.
-  if (u >= -HALF_W - 1.2 - r && u <= HALF_W + 1.2 + r && d >= -HOUSE_DEPTH - 0.6 - r && d <= ROOF_OVER + r && yl >= ROOF_Y - r && yl <= ROOF_Y + ROOF_T + r) return 'roof';
+  // The roof (its shape is the house's own) and whatever else of its build is solid: a chimney, a clerestory, the carport.
+  if (h.style) {
+    const part = hitStyle(h.style, u, d, yl, r);
+    if (part) return part;
+  } else if (u >= -HALF_W - 1.2 - r && u <= HALF_W + 1.2 + r && d >= -HOUSE_DEPTH - 0.6 - r && d <= ROOF_OVER + r && yl >= ROOF_Y - r && yl <= ROOF_Y + ROOF_T + r) return 'roof';
   // The mailbox wall with the house number, right of the glass.
   if (u >= HALF_W + 0.9 - r && u <= HALF_W + 3.1 + r && d >= 1.6 - r && d <= 2.0 + r && yl <= 1.9 + r && yl >= -r) return 'wall';
   // The plinth's front step.
@@ -280,7 +284,7 @@ export function stepStone(s, field, wind, panesOf, bodies, hit, dt = DT) {
   // Houses' solid parts.
   for (const h of field.houses) {
     toLocal(h, x1, z1, tmp);
-    if (tmp.u < -HALF_W - 3.5 || tmp.u > HALF_W + 3.5 || tmp.d < -HOUSE_DEPTH - 1 || tmp.d > ROOF_OVER + 1) continue;
+    if (tmp.u < -HALF_W - 3.5 || tmp.u > HALF_W + 6 || tmp.d < -HOUSE_DEPTH - 1 || tmp.d > ROOF_OVER + 2) continue;
     const part = hitHouseSolid(h, tmp.u, tmp.d, y1 - h.elev, r, s.inside === h.i);
     if (part) {
       hit.what = part;

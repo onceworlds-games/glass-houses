@@ -11,16 +11,21 @@ const CELL_U = PANE_W + MULLION;
 const CELL_Y = PANE_H + MULLION;
 const SHARDS = { low: 160, medium: 360, high: 700 };
 
-/** Glass as light does it: what it reflects is added, what is behind shows through dimmed. */
+/**
+ * Glass as light does it: what it reflects is added on top, what is behind shows through, dimmed by the tint. Straight on you see
+ * into the room; at a glance along the front it turns to mirror (fresnel). Each pane leans a hair differently (`tilt`), so the
+ * reflections of the street break from pane to pane the way real glazing does; faint smudges vary how sharp they are.
+ */
 export function glassMaterial(opts = {}) {
   const m = new THREE.MeshStandardMaterial({
     map: opts.map ?? null,
-    color: opts.color ?? '#CFEFF0',
-    metalness: opts.metalness ?? 0.45,
-    roughness: opts.roughness ?? 0.03,
+    roughnessMap: opts.roughnessMap ?? null,
+    color: opts.color ?? '#10201F',
+    metalness: opts.metalness ?? 0.0,
+    roughness: opts.roughness ?? 1.0,
     transparent: true,
-    opacity: opts.opacity ?? 0.38,
-    envMapIntensity: opts.env ?? 1.7,
+    opacity: opts.opacity ?? 0.3,
+    envMapIntensity: opts.env ?? 2.2,
     side: opts.side ?? THREE.FrontSide,
     depthWrite: false,
   });
@@ -28,7 +33,57 @@ export function glassMaterial(opts = {}) {
   m.blendSrc = THREE.OneFactor;
   m.blendDst = THREE.OneMinusSrcAlphaFactor;
   m.blendEquation = THREE.AddEquation;
+  const tilted = !!opts.tilt;
+  const reflect = (opts.reflect ?? 4.5).toFixed(2);
+  m.onBeforeCompile = (shader) => {
+    shader.fragmentShader = `#define REFLECT ${reflect}\n${shader.fragmentShader}`;
+    if (tilted) {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute vec2 tilt;')
+        .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nobjectNormal = normalize(objectNormal + vec3(tilt, 0.0));');
+    }
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <opaque_fragment>',
+        `{
+          float fres = pow(1.0 - saturate(dot(normalize(normal), normalize(vViewPosition))), 4.0);
+          // Window glass reflects about a fifth of the bright street straight on, nearly all of it at a glance.
+          outgoingLight += totalSpecular * (REFLECT + fres * 14.0);
+          diffuseColor.a = mix(diffuseColor.a, 0.94, fres);
+        }
+        #include <opaque_fragment>`,
+      );
+  };
+  m.customProgramCacheKey = () => `glass:${tilted}:${reflect}`;
   return m;
+}
+
+/** Faint smudges and streaks in the roughness: glass that has been lived behind. */
+function smudgeTexture() {
+  return canvasTexture(
+    128,
+    224,
+    (g, w, h) => {
+      g.fillStyle = 'rgb(10,10,10)';
+      g.fillRect(0, 0, w, h);
+      const r = createRng(77);
+      for (let i = 0; i < 26; i++) {
+        g.globalAlpha = 0.08 + r.next() * 0.1;
+        g.fillStyle = 'rgb(120,120,120)';
+        g.beginPath();
+        g.ellipse(r.next() * w, r.next() * h, 6 + r.next() * 20, 3 + r.next() * 10, r.next() * 3, 0, Math.PI * 2);
+        g.fill();
+      }
+      // Dried rain at the foot.
+      g.globalAlpha = 0.25;
+      for (let i = 0; i < 40; i++) {
+        g.fillStyle = 'rgb(90,90,90)';
+        g.fillRect(r.next() * w, h - 10 - r.next() * 34, 1.2, 4 + r.next() * 10);
+      }
+      g.globalAlpha = 1;
+    },
+    false,
+  );
 }
 
 function teethGeometry(seed) {
@@ -65,40 +120,6 @@ function teethGeometry(seed) {
   hole.closePath();
   outer.holes.push(hole);
   return new THREE.ShapeGeometry(outer);
-}
-
-/**
- * What makes a pane read as glass at any distance and on any quality: a cool tint darker at the foot, two bright diagonal streaks
- * and a lit top and left edge. More opaque where it shines.
- */
-function paneTexture() {
-  return canvasTexture(
-    128,
-    224,
-    (g, w, h) => {
-      const grd = g.createLinearGradient(0, 0, 0, h);
-      grd.addColorStop(0, 'rgba(150,200,208,0.5)');
-      grd.addColorStop(0.5, 'rgba(84,140,152,0.4)');
-      grd.addColorStop(1, 'rgba(52,100,114,0.55)');
-      g.fillStyle = grd;
-      g.fillRect(0, 0, w, h);
-      g.save();
-      g.translate(w / 2, h / 2);
-      g.rotate(-0.62);
-      g.fillStyle = 'rgba(255,255,255,0.72)';
-      g.fillRect(-w * 0.95, -h * 0.02, w * 1.9, h * 0.12);
-      g.fillStyle = 'rgba(255,255,255,0.5)';
-      g.fillRect(-w * 0.95, h * 0.15, w * 1.9, h * 0.035);
-      g.restore();
-      g.fillStyle = 'rgba(255,255,255,0.9)';
-      g.fillRect(0, 0, w, 5);
-      g.fillRect(0, 0, 5, h);
-      g.fillStyle = 'rgba(60,90,96,0.5)';
-      g.fillRect(0, h - 4, w, 4);
-      g.fillRect(w - 4, 0, 4, h);
-    },
-    false,
-  );
 }
 
 function crackTexture() {
@@ -156,13 +177,15 @@ export function createGlass(field, scene, quality = 'medium') {
   const n = field.houses.length;
   const total = n * PANES;
   const frames = field.houses.map(houseFrame);
-  const paneMat = glassMaterial({ map: paneTexture(), color: '#FFFFFF', opacity: 0.85 });
+  const smudge = smudgeTexture();
+  if (smudge) smudge.colorSpace = THREE.NoColorSpace;
+  const paneMat = glassMaterial({ roughnessMap: smudge, roughness: 1.0, opacity: 0.4, tilt: true });
   // Pre-mirrored: the house frames mirror, and an instance matrix can't flip a mesh's facing the way an object's matrix does.
   const paneGeo = new THREE.PlaneGeometry(PANE_W, PANE_H).scale(-1, 1, 1);
   const panes = new THREE.InstancedMesh(paneGeo, paneMat, total);
   panes.renderOrder = 2;
   const teethGeos = [teethGeometry(1), teethGeometry(2), teethGeometry(3)].map((g) => g.scale(-1, 1, 1));
-  const teethMat = glassMaterial({ opacity: 0.55, env: 2.2, side: THREE.DoubleSide });
+  const teethMat = glassMaterial({ opacity: 0.5, env: 2.6, roughness: 0.05, color: '#1A2C2C', side: THREE.DoubleSide });
   const teeth = teethGeos.map((g) => {
     const m = new THREE.InstancedMesh(g, teethMat, total);
     m.count = 0;
@@ -192,10 +215,17 @@ export function createGlass(field, scene, quality = 'medium') {
       paneM.push(mm);
       panes.setMatrixAt(h * PANES + p, mm);
       // A touch of variation from pane to pane, as real glass has.
-      tint.setRGB(0.92 + rng.next() * 0.08, 0.97 + rng.next() * 0.03, 0.97 + rng.next() * 0.03);
+      tint.setRGB(0.9 + rng.next() * 0.1, 0.95 + rng.next() * 0.05, 0.95 + rng.next() * 0.05);
       panes.setColorAt(h * PANES + p, tint);
     }
   }
+  // Each pane's lean.
+  const tilt = new Float32Array(total * 2);
+  for (let i = 0; i < total; i++) {
+    tilt[i * 2] = (rng.next() - 0.5) * 0.06;
+    tilt[i * 2 + 1] = (rng.next() - 0.5) * 0.05;
+  }
+  paneGeo.setAttribute('tilt', new THREE.InstancedBufferAttribute(tilt, 2));
   panes.instanceMatrix.needsUpdate = true;
   if (panes.instanceColor) panes.instanceColor.needsUpdate = true;
   const state = new Uint8Array(total).fill(GLASS);
@@ -384,7 +414,7 @@ export function createGlass(field, scene, quality = 'medium') {
       paneMat.dispose();
       teethMat.dispose();
       crackMat.map?.dispose();
-      paneMat.map?.dispose();
+      smudge?.dispose();
       crackMat.dispose();
       shardMat.dispose();
       panes.dispose();
