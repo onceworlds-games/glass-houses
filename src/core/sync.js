@@ -8,7 +8,7 @@ import { buildField } from './streets.js';
 import { createRound, rankHouses, glassCount } from './round.js';
 import { createBrain, personaByName } from './bots.js';
 import { checkThrow, createLimiter, readPresence, readHouses, readBodies, readSpecials, decider } from './net.js';
-import { PICKUP_R, SPECIAL_DROP_MS, REPAIR_MS } from './config.js';
+import { PICKUP_R, SPECIAL_DROP_MS } from './config.js';
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const lerpAngle = (a, b, t) => {
@@ -20,7 +20,7 @@ const lerpAngle = (a, b, t) => {
 
 /**
  * opts: { myId, send(msg), grab(specialId) (ask the host for a special), autoplay (this page's seat plays itself), gentle (the
- * player is new: bots go easy on their house) }
+ * player is new: bots go easy on their house), look() (what this player shows the street: see readLook) }
  */
 export function createSync(opts) {
   const S = {
@@ -38,6 +38,8 @@ export function createSync(opts) {
     limiter: createLimiter(),
     targets: new Map(),
     rejected: 0,
+    looks: new Map(),
+    hotLog: new Map(),
   };
 
   const seatOf = (id) => S.ids.indexOf(id);
@@ -72,6 +74,7 @@ export function createSync(opts) {
     S.thrown.clear();
     S.limiter.clear();
     S.targets.clear();
+    S.hotLog.clear();
     S.seats = S.ids.map((id) => {
       const s = seats.find((x) => x.id === id);
       return { id, name: s?.name ?? 'Neighbour', bot: s ? !!s.bot : id.startsWith('bot:'), away: !!s?.away, left: s ? !!s.left : true, skill: s?.skill ?? 0.5, gentle: false };
@@ -82,6 +85,7 @@ export function createSync(opts) {
       field: S.field,
       seed: data.seed,
       round: data.round,
+      twist: data.twist,
       seats: S.seats,
       host: S.isHost,
       decides,
@@ -149,6 +153,14 @@ export function createSync(opts) {
       S.rejected++;
       return false;
     }
+    // Hot stones come from a run of hits: at most two in any four throws from one thrower.
+    if (msg.kind === 'stone') {
+      const log = S.hotLog.get(msg.by) ?? [];
+      if (msg.hot === 1 && log.filter(Boolean).length >= 2) delete msg.hot;
+      log.push(msg.hot === 1);
+      if (log.length > 3) log.shift();
+      S.hotLog.set(msg.by, log);
+    }
     if (msg.kind === 'brick' || msg.kind === 'gnome') {
       const sp = R.specials.find((s) => s.holder === seat && s.kind === msg.kind && !s.used);
       if (sp) {
@@ -166,7 +178,8 @@ export function createSync(opts) {
     if (!R || i < 0 || i === S.mySeat) return;
     const p = readPresence(raw);
     if (!p || p.r !== S.key) return;
-    if (!decides(i) && p.g !== null) R.setMask(i, p.g, p.c, p.gv, p.out >= 0 ? p.out : undefined);
+    if (p.lk) S.looks.set(i, p.lk);
+    if (!decides(i) && p.g !== null) R.setMask(i, p.g, p.c, p.gv, p.out >= 0 ? p.out : undefined, p.ko ? seatOf(p.ko) : -1);
     if (decides(i)) return;
     const q = readPresence(pose) ?? p;
     applyPose(i, q, 1);
@@ -183,7 +196,7 @@ export function createSync(opts) {
     b.winding = p.pw > 0;
     b.stunUntil = p.st;
     b.repairing = p.rp > 0;
-    b.repairMs = p.rp * REPAIR_MS;
+    b.repairMs = p.rp * S.R.repairMs;
     b.held = p.h;
     b.ghost = p.gh === 1;
     b.gx = lerp(b.gx, p.gx, t);
@@ -198,7 +211,7 @@ export function createSync(opts) {
     for (const [id, m] of Object.entries(h)) {
       const i = seatOf(id);
       if (i < 0 || decides(i)) continue;
-      R.setMask(i, m.g, m.c, m.v, m.out >= 0 ? m.out : undefined);
+      R.setMask(i, m.g, m.c, m.v, m.out >= 0 ? m.out : undefined, m.ko ? seatOf(m.ko) : -1);
     }
   };
 
@@ -303,7 +316,7 @@ export function createSync(opts) {
       pitch: r3(b.pitch),
       pw: b.winding ? r3(b.power) : 0,
       st: b.stunUntil > S.R.now ? Math.round(b.stunUntil) : -1,
-      rp: b.repairing ? r3(Math.min(1, b.repairMs / REPAIR_MS)) : 0,
+      rp: b.repairing ? r3(Math.min(1, b.repairMs / S.R.repairMs)) : 0,
       h: b.held ?? null,
       gh: b.ghost ? 1 : 0,
       gx: r3(b.gx),
@@ -314,14 +327,15 @@ export function createSync(opts) {
   function maskOut(i) {
     const m = S.R.maskOf(i);
     const out = S.R.houses[i].outAt;
-    return { g: m.g, c: m.c, v: m.v, out: out >= 0 ? Math.round(out) : -1 };
+    return { g: m.g, c: m.c, v: m.v, out: out >= 0 ? Math.round(out) : -1, ko: m.ko >= 0 ? S.ids[m.ko] ?? '' : '' };
   }
 
   /** This page's presence: its body and its glass, for this round. */
   S.presence = function presence() {
     if (!S.R || S.mySeat < 0) return { r: S.key };
     const m = maskOut(S.mySeat);
-    return { ...poseOf(S.mySeat), g: m.g, c: m.c, gv: m.v, out: m.out, r: S.key };
+    const lk = opts.look?.() ?? null;
+    return { ...poseOf(S.mySeat), g: m.g, c: m.c, gv: m.v, out: m.out, ko: m.ko, lk, r: S.key };
   };
 
   /** Host: the houses it decides (bots, away players), by seat id, under this round's key. */

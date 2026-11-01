@@ -122,8 +122,8 @@ test('stones stop on the ground, on the oak, and fall to the sea off Cliff Top',
   const oak = tracePath(f, 'stone', { x: 10, y: 3, z: 0 }, { x: -20, y: 0, z: 0 }, NO_WIND, null, null, 4);
   assert.equal(oak.what, 'tree');
   const cliff = buildField(3);
-  // The open side of the horseshoe: past the last house and before the first.
-  const a = cliff.houses[5].angle + cliff.step;
+  // The open side of the horseshoe: halfway from the last house round to the first.
+  const a = cliff.houses[5].angle + (2 * Math.PI - cliff.step * 5) / 2;
   const sea = tracePath(cliff, 'stone', { x: 15 * Math.cos(a), y: 2, z: 15 * Math.sin(a) }, { x: 25 * Math.cos(a), y: 3, z: 25 * Math.sin(a) }, NO_WIND, null, null, 8);
   assert.equal(sea.what, 'sea');
 });

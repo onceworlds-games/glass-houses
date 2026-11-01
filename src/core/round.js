@@ -11,8 +11,17 @@ import {
 import { clampToLawn, inLawn } from './streets.js';
 import { stepStone, windAt, handOf, velocityOf, tracePath, paneCentre } from './physics.js';
 import { createRng, hash } from './rng.js';
+import { twistRules, goldPanes } from './twists.js';
 
 const PRED_MS = 650;
+
+// Trick shots: what makes a break worth naming.
+export const LONG_SHOT_M = 38;
+export const RAINBOW_M = 7;
+export const RUN_SPEED = 3.0;
+export const PAYBACK_MS = 6000;
+export const LAST_STAND = 2;
+export const BUZZER_MS = 6000;
 
 /** Panes in the order a glazier re-glazes them: the middle of the facade first, ground floor first. */
 export const REPAIR_ORDER = Array.from({ length: PANES }, (_, p) => p).sort((a, b) => {
@@ -82,6 +91,9 @@ export function newBody(field, seat) {
     pebbles: PEBBLES_MAX,
     pebbleMs: 0,
     poofUntil: -1,
+    heat: 0,
+    hot: false,
+    streak: 0,
     away: false,
     skip: false,
     lastThrowAt: -1e9,
@@ -90,8 +102,9 @@ export function newBody(field, seat) {
 }
 
 /**
- * opts: { field, seed, round, seats: [{ id, name, bot, persona, skill, gentle }], host, decides(h), controls(s), brains, onThrow(msg),
- *         onGrab(special), late (bool: replay late throws against other stones) }
+ * opts: { field, seed, round, twist (the Gazette's, see twists.js), rules (overrides of its rules, for tests), seats: [{ id, name,
+ *         bot, persona, skill, gentle }], host, decides(h), controls(s), brains, onThrow(msg), onGrab(special), late (bool: replay
+ *         late throws against other stones) }
  */
 export function createRound(opts) {
   const field = opts.field;
@@ -106,6 +119,9 @@ export function createRound(opts) {
   const clampOut = { x: 0, z: 0, clamped: false };
   const handTmp = { x: 0, y: 0, z: 0 };
   const velTmp = { x: 0, y: 0, z: 0 };
+  const rules = { ...twistRules(opts.twist ?? 'quiet'), ...(opts.rules ?? {}) };
+  const gold = goldPanes(seedNum, opts.round ?? 1, rules.gold);
+  const goldMask = gold.reduce((m, p) => m | (1 << p), 0) >>> 0;
 
   const R = {
     field,
@@ -115,17 +131,23 @@ export function createRound(opts) {
     tick: 0,
     now: 0,
     over: false,
-    houses: field.houses.slice(0, n).map((h) => ({ i: h.i, seat: h.i, panes: new Uint8Array(PANES).fill(GLASS), version: 0, outAt: -1, lastBy: -1, pending: new Map(), hitsTaken: 0 })),
+    houses: field.houses.slice(0, n).map((h) => ({ i: h.i, seat: h.i, panes: new Uint8Array(PANES).fill(GLASS), version: 0, outAt: -1, lastBy: -1, koBy: -1, salvaged: false, hurtBy: -1, hurtAt: -1e9, gold: goldMask, pending: new Map(), hitsTaken: 0 })),
     bodies: seats.map((_, i) => newBody(field, i)),
     stones: [],
     recent: [],
     specials: [],
     events: [],
-    stats: seats.map(() => ({ thrown: 0, broke: 0, cracked: 0, glassHits: 0, intercepts: 0, bonks: 0, gnomeDouble: 0, lost: 0, bonked: 0, glazed: 0 })),
+    stats: seats.map(() => ({ thrown: 0, broke: 0, cracked: 0, glassHits: 0, intercepts: 0, bonks: 0, gnomeDouble: 0, lost: 0, bonked: 0, glazed: 0, kos: 0, salvaged: 0, hot: 0, hotBroke: 0, gold: 0, bestStreak: 0, tricks: 0, trick: {}, longest: 0 })),
     counters: seats.map(() => 0),
     brains: opts.brains ?? seats.map(() => null),
     wind,
     specialPlan: [],
+    twist: rules.id,
+    rules,
+    gold,
+    storeClose: rules.storeClose,
+    repairMs: Math.round(REPAIR_MS * rules.repairScale),
+    hailPlan: rules.hail.map((at, k) => ({ at, k, warned: false, done: false })),
     onThrow: opts.onThrow ?? null,
     onGrab: opts.onGrab ?? null,
     isHost: host,
@@ -135,13 +157,13 @@ export function createRound(opts) {
 
   {
     const rng = createRng(hash(`specials:${seedNum}:${R.roundNo}`));
-    const gap = field.street.specialGap ?? [25000, 35000];
-    let t = SPECIAL_FIRST_MS;
-    let kind = rng.chance(0.5) ? 'brick' : 'gnome';
+    const gap = rules.specialGap ?? field.street.specialGap ?? [25000, 35000];
+    let t = rules.specialFirst ?? SPECIAL_FIRST_MS;
+    let kind = rules.specialKind ?? (rng.chance(0.5) ? 'brick' : 'gnome');
     let id = 1;
     while (t <= SPECIAL_LAST_MS) {
       R.specialPlan.push({ id: id++, kind, at: Math.round(t), r: rng.next() });
-      kind = kind === 'brick' ? 'gnome' : 'brick';
+      kind = rules.specialKind ?? (kind === 'brick' ? 'gnome' : 'brick');
       t += rng.range(gap[0], gap[1]);
     }
   }
@@ -153,8 +175,20 @@ export function createRound(opts) {
 
   const panesOf = (h) => (R.houses[h] ? R.houses[h].panes : null);
   R.panesOf = panesOf;
-  R.windNow = () => windAt(field, seedNum, R.roundNo, R.now, wind);
-  R.storeOpen = () => R.now < STORE_CLOSE_MS;
+  // A gale blows from round 1 and twice as hard.
+  const windRound = rules.windRound1 ? R.roundNo : Math.max(2, R.roundNo);
+  const windOf = (t, out) => {
+    windAt(field, seedNum, windRound, t, out);
+    if (rules.windScale !== 1) {
+      out.x *= rules.windScale;
+      out.z *= rules.windScale;
+      out.s *= rules.windScale;
+    }
+    return out;
+  };
+  R.windAt = windOf;
+  R.windNow = () => windOf(R.now, wind);
+  R.storeOpen = () => R.now < R.storeClose;
   R.glass = (h) => glassCount(R.houses[h].panes);
   R.alive = () => R.houses.filter((h) => h.outAt < 0 && glassCount(h.panes) > 0).length;
   R.decides = decides;
@@ -207,6 +241,9 @@ export function createRound(opts) {
       inside: -1,
       alive: true,
       skipped: false,
+      hot: msg.hot === 1 && msg.kind === 'stone',
+      apex: msg.o[1] / 1000,
+      run: false,
       effects: [],
       hist: new Float32Array(HISTORY_TICKS * 3),
       pred: null,
@@ -216,24 +253,28 @@ export function createRound(opts) {
     s.px = s.x;
     s.py = s.y;
     s.pz = s.z;
+    // On the run: only the thrower's own page knows how fast they were going.
+    if (controls(seat) && !R.bodies[seat].ghost) s.run = Math.hypot(R.bodies[seat].vx, R.bodies[seat].vz) >= RUN_SPEED;
     predict(s);
     R.stats[seat].thrown++;
+    if (s.hot) R.stats[seat].hot++;
     if (msg.tk >= R.tick) {
       s.pendingUntil = msg.tk;
       R.stones.push(s);
-      emit({ type: 'throw', seat, kind: s.kind, x: s.x, y: s.y, z: s.z, id: s.id });
+      emit({ type: 'throw', seat, kind: s.kind, x: s.x, y: s.y, z: s.z, id: s.id, hot: s.hot });
       return true;
     }
     // Late: replay it from its tick, against the stones that were in the air then.
-    emit({ type: 'throw', seat, kind: s.kind, x: s.x, y: s.y, z: s.z, id: s.id, late: R.tick - msg.tk });
+    emit({ type: 'throw', seat, kind: s.kind, x: s.x, y: s.y, z: s.z, id: s.id, hot: s.hot, late: R.tick - msg.tk });
     for (let k = msg.tk; k < R.tick && s.alive; k++) {
       s.px = s.x;
       s.py = s.y;
       s.pz = s.z;
       const t = k * TICK_MS;
-      windAt(field, seedNum, R.roundNo, t, wind);
+      windOf(t, wind);
       const got = stepStone(s, field, wind, panesOf, R.bodies, hit);
       record(s, k);
+      if (s.y > s.apex) s.apex = s.y;
       if (got) {
         resolve(s, hit, k);
         break;
@@ -246,7 +287,7 @@ export function createRound(opts) {
   };
 
   function predict(s) {
-    windAt(field, seedNum, R.roundNo, s.born * TICK_MS, wind);
+    windOf(s.born * TICK_MS, wind);
     const h = tracePath(field, s.kind, { x: s.x, y: s.y, z: s.z }, { x: s.vx, y: s.vy, z: s.vz }, wind, panesOf, R.bodies, 4, DT * 2, null, s.seat);
     s.pred = h.what;
     s.predHouse = h.house;
@@ -356,8 +397,47 @@ export function createRound(opts) {
   function intercepted(s, o, x, y, z) {
     const later = s.born >= o.born ? s : o;
     const earlier = later === s ? o : s;
-    if (later.seat !== earlier.seat) R.stats[later.seat].intercepts++;
-    emit({ type: 'clack', x, y, z, by: later.seat, victim: earlier.seat, a: s.id, b: o.id });
+    emit({ type: 'clack', x, y, z, by: later.seat, victim: earlier.seat, a: s.id, b: o.id, hot: earlier.hot });
+    if (later.seat !== earlier.seat) {
+      R.stats[later.seat].intercepts++;
+      judge(later, 'hit');
+      trick(later.seat, earlier.hot ? ['intercept', 'firefighter'] : ['intercept'], x, y, z, -1);
+    }
+  }
+
+  // ------------------------------------------------------------ heat: glass hits in a row heat the next stone; a miss cools you
+
+  function judge(s, outcome) {
+    if (s.kind === 'pebble' || !controls(s.seat)) return;
+    const b = R.bodies[s.seat];
+    if (b.ghost) return;
+    if (outcome === 'hit') {
+      b.streak++;
+      if (b.streak > R.stats[s.seat].bestStreak) R.stats[s.seat].bestStreak = b.streak;
+      if (b.hot) return;
+      b.heat++;
+      if (b.heat >= rules.heatNeed) {
+        b.heat = 0;
+        b.hot = true;
+        emit({ type: 'hot', seat: s.seat });
+      } else emit({ type: 'heat', seat: s.seat, heat: b.heat });
+    } else if (outcome === 'miss') {
+      const had = b.heat > 0 || b.streak > 0;
+      b.heat = 0;
+      b.streak = 0;
+      if (had) emit({ type: 'heat', seat: s.seat, heat: 0, cooled: true });
+    }
+  }
+
+  /** Named shots: counted for whoever threw, shown to everyone. */
+  function trick(seat, ids, x, y, z, house) {
+    if (!ids.length || seat < 0) return;
+    const st = R.stats[seat];
+    for (const id of ids) {
+      st.tricks++;
+      st.trick[id] = (st.trick[id] ?? 0) + 1;
+    }
+    emit({ type: 'trick', seat, ids, x, y, z, house });
   }
 
   function retire(s) {
@@ -381,6 +461,29 @@ export function createRound(opts) {
     return true;
   }
 
+  /** The panes a hit takes: the one it hit, and for a brick, a gnome or a hot stone, its neighbours. */
+  function panesHit(s, h, house) {
+    const list = [h.pane];
+    const col = h.pane % COLS;
+    const row0 = h.pane - col;
+    if (s.kind === 'brick') {
+      if (col > 0) list.push(h.pane - 1);
+      if (col < COLS - 1) list.push(h.pane + 1);
+    } else if (s.kind === 'gnome' || s.hot) {
+      const hh = field.houses[h.house];
+      const along = s.vx * hh.rx + s.vz * hh.rz;
+      // A hot stone goes through the pane above or below it first; a gnome tumbles along.
+      const other = h.pane < COLS ? h.pane + COLS : h.pane - COLS;
+      if (s.hot && house.panes[other] > 0) list.push(other);
+      else {
+        let next = col + (along >= 0 ? 1 : -1);
+        if (next < 0 || next >= COLS) next = col + (along >= 0 ? -1 : 1);
+        list.push(row0 + next);
+      }
+    }
+    return list;
+  }
+
   function resolve(s, h, k) {
     const t = k * TICK_MS;
     const by = s.seat;
@@ -391,42 +494,78 @@ export function createRound(opts) {
       const house = R.houses[h.house];
       if (!house || house.seat === by) {
         emit({ type: 'clunk', what: 'own', x: h.x, y: h.y, z: h.z, by, kind: s.kind, house: h.house });
+        judge(s, 'miss');
         return;
       }
       const state = house.panes[h.pane];
       const broken = [];
       let cracked = -1;
-      if (s.kind === 'pebble') {
+      const goldBefore = house.gold;
+      // A pebble cracks whole glass; so does a plain stone on a double-glazed ground floor.
+      const soft = s.kind === 'pebble' || (rules.doubleGlazing && s.kind === 'stone' && !s.hot && h.pane < COLS);
+      if (soft) {
         if (state === GLASS) {
           setPane(h.house, h.pane, CRACKED, s);
           cracked = h.pane;
           R.stats[by].cracked++;
         } else if (setPane(h.house, h.pane, BROKEN, s)) broken.push(h.pane);
       } else {
-        const list = [h.pane];
-        const col = h.pane % COLS;
-        const row0 = h.pane - col;
-        if (s.kind === 'brick') {
-          if (col > 0) list.push(h.pane - 1);
-          if (col < COLS - 1) list.push(h.pane + 1);
-        } else if (s.kind === 'gnome') {
-          const hh = field.houses[h.house];
-          const along = s.vx * hh.rx + s.vz * hh.rz;
-          let next = col + (along >= 0 ? 1 : -1);
-          if (next < 0 || next >= COLS) next = col + (along >= 0 ? -1 : 1);
-          list.push(row0 + next);
-        }
-        for (const p of list) if (house.panes[p] > 0 && setPane(h.house, p, BROKEN, s)) broken.push(p);
+        for (const p of panesHit(s, h, house)) if (house.panes[p] > 0 && setPane(h.house, p, BROKEN, s)) broken.push(p);
       }
       R.stats[by].glassHits++;
+      let golden = false;
+      for (const p of broken) {
+        if (house.gold & (1 << p)) {
+          house.gold &= ~(1 << p);
+          golden = true;
+        }
+      }
       if (broken.length) {
         R.stats[by].broke += broken.length;
         R.stats[house.seat].lost += broken.length;
         if (s.kind === 'gnome' && broken.length >= 2) R.stats[by].gnomeDouble++;
+        if (s.hot) R.stats[by].hotBroke += broken.length;
       }
       house.lastBy = by;
       house.hitsTaken++;
-      emit({ type: broken.length ? 'break' : cracked >= 0 ? 'crack' : 'clunk', what: 'glass', house: h.house, panes: broken, pane: h.pane, cracked, kind: s.kind, by, x: h.x, y: h.y, z: h.z, vx: s.vx, vy: s.vy, vz: s.vz, predicted: !decides(h.house), t });
+      const dist = Math.hypot(h.x - s.ox, h.z - s.oz);
+      emit({ type: broken.length ? 'break' : cracked >= 0 ? 'crack' : 'clunk', what: 'glass', house: h.house, panes: broken, pane: h.pane, cracked, kind: s.kind, hot: s.hot, by, x: h.x, y: h.y, z: h.z, vx: s.vx, vy: s.vy, vz: s.vz, d: Math.round(dist), predicted: !decides(h.house), t });
+      judge(s, 'hit');
+      if (broken.length || cracked >= 0) {
+        const tricks = [];
+        if (dist > R.stats[by].longest) R.stats[by].longest = Math.round(dist * 10) / 10;
+        if (dist >= LONG_SHOT_M && s.kind !== 'pebble') tricks.push('long');
+        if (s.apex - s.oy >= RAINBOW_M && s.kind !== 'pebble') tricks.push('rainbow');
+        if (s.run) tricks.push('run');
+        if (s.kind === 'gnome' && s.skipped && broken.length) tricks.push('skipper');
+        if (s.kind === 'pebble' && broken.length) tricks.push('grave');
+        const mine = R.houses[by];
+        if (mine && mine.hurtBy === h.house && t - mine.hurtAt < PAYBACK_MS && broken.length) {
+          tricks.push('payback');
+          mine.hurtBy = -1;
+        }
+        if (mine && mine.outAt < 0 && !R.bodies[by].ghost && glassCount(mine.panes) <= LAST_STAND && broken.length) tricks.push('stand');
+        if (t >= ROUND_MS - BUZZER_MS && broken.length) tricks.push('buzzer');
+        if (golden && goldBefore !== house.gold) {
+          tricks.push('gold');
+          R.stats[by].gold++;
+          if (controls(by) && !R.bodies[by].ghost) {
+            const b = R.bodies[by];
+            b.ammo = AMMO_MAX;
+            b.ammoMs = 0;
+            if (!b.hot) {
+              b.hot = true;
+              b.heat = 0;
+              emit({ type: 'hot', seat: by, gold: true });
+            }
+          }
+        }
+        trick(by, tricks, h.x, h.y, h.z, h.house);
+      }
+      if (broken.length) {
+        house.hurtBy = by;
+        house.hurtAt = t;
+      }
       checkOut(h.house, t);
       return;
     }
@@ -441,6 +580,10 @@ export function createRound(opts) {
         b.power = 0;
         b.repairing = false;
         b.repairMs = 0;
+        // A bonk cools you down.
+        if (b.hot || b.heat > 0) emit({ type: 'heat', seat: h.body, heat: 0, cooled: true, lost: b.hot });
+        b.hot = false;
+        b.heat = 0;
         R.stats[by].bonks++;
         R.stats[h.body].bonked++;
       }
@@ -470,12 +613,13 @@ export function createRound(opts) {
       emit({ type: 'skip', x: h.x, y: h.y, z: h.z, by });
       return;
     }
+    judge(s, 'miss');
     if (what === 'inside') {
       emit({ type: 'inside', house: h.house, x: h.x, y: h.y, z: h.z, by, kind: s.kind });
       return;
     }
     if (what === 'ground' || what === 'terrace') {
-      emit({ type: 'land', what, x: h.x, y: h.y, z: h.z, by, kind: s.kind, vx: s.vx, vz: s.vz });
+      emit({ type: 'land', what, x: h.x, y: h.y, z: h.z, by, kind: s.kind, vx: s.vx, vz: s.vz, hot: s.hot });
       return;
     }
     if (what === 'sea' || what === 'gone') {
@@ -490,10 +634,53 @@ export function createRound(opts) {
     if (house.outAt >= 0 || !decides(h)) return;
     if (glassCount(house.panes) === 0) {
       house.outAt = t;
-      emit({ type: 'out', house: h, by: house.lastBy, t });
+      knockedOut(h, house.lastBy, t);
     }
   }
   R.checkOut = checkOut;
+
+  /** A house fell: the knockout is named, and the one who did it gets a pane of their own back. */
+  function knockedOut(h, by, t) {
+    const house = R.houses[h];
+    house.koBy = by;
+    emit({ type: 'out', house: h, by, t });
+    if (by < 0 || by === h) return;
+    R.stats[by].kos++;
+    const c = paneCentre(field.houses[h], 4, {});
+    trick(by, ['ko'], c.x, c.y, c.z, h);
+    salvage(by, h);
+  }
+
+  /** Knockout salvage: the knocker's own house gets its first broken pane back (or, with none broken, a hot stone). */
+  function salvage(by, from) {
+    const mine = R.houses[by];
+    const fallen = R.houses[from];
+    if (!mine || !fallen || fallen.salvaged || !decides(by) || mine.outAt >= 0) return;
+    fallen.salvaged = true;
+    R.stats[by].salvaged++;
+    const p = nextToGlaze(mine.panes);
+    if (p >= 0) {
+      setPane(by, p, GLASS, null);
+      emit({ type: 'salvage', house: by, pane: p, from });
+    } else {
+      const b = R.bodies[by];
+      if (controls(by) && !b.ghost && !b.hot) {
+        b.hot = true;
+        b.heat = 0;
+        emit({ type: 'hot', seat: by, salvage: true });
+      }
+      emit({ type: 'salvage', house: by, pane: -1, from });
+    }
+  }
+
+  /** The pane a glazier fixes next: broken ones first (middle out, ground floor first), then cracked. Hail rounds: cracked first. */
+  function nextToGlaze(panes) {
+    const first = rules.hail.length ? CRACKED : BROKEN;
+    for (const p of REPAIR_ORDER) if (panes[p] === first) return p;
+    for (const p of REPAIR_ORDER) if (panes[p] < GLASS) return p;
+    return -1;
+  }
+  R.nextToGlaze = nextToGlaze;
 
   // ------------------------------------------------------------ people
 
@@ -509,6 +696,9 @@ export function createRound(opts) {
       b.winding = false;
       b.repairing = false;
       b.held = null;
+      b.hot = false;
+      b.heat = 0;
+      b.streak = 0;
       b.gx = b.x * 0.45;
       b.gz = b.z * 0.45;
       b.gy = GHOST_Y;
@@ -617,19 +807,17 @@ export function createRound(opts) {
     }
     // Repairing.
     const speed = Math.hypot(b.vx, b.vz);
-    const want = inp.repair && !b.ghost && !b.winding && !stunned && speed < 0.4 && t < STORE_CLOSE_MS && house.outAt < 0 && needsGlass(house.panes) && decides(i) && !R.over;
+    const want = inp.repair && !b.ghost && !b.winding && !stunned && speed < 0.4 && t < R.storeClose && house.outAt < 0 && needsGlass(house.panes) && decides(i) && !R.over;
     if (want) {
       b.repairing = true;
       b.repairMs += dtMs;
-      if (b.repairMs >= REPAIR_MS) {
+      if (b.repairMs >= R.repairMs) {
         b.repairMs = 0;
-        for (const p of REPAIR_ORDER) {
-          if (house.panes[p] < GLASS) {
-            setPane(i, p, GLASS, null);
-            R.stats[i].glazed++;
-            emit({ type: 'glaze', house: i, pane: p, seat: i });
-            break;
-          }
+        const p = nextToGlaze(house.panes);
+        if (p >= 0) {
+          setPane(i, p, GLASS, null);
+          R.stats[i].glazed++;
+          emit({ type: 'glaze', house: i, pane: p, seat: i });
         }
       }
     } else {
@@ -676,6 +864,10 @@ export function createRound(opts) {
     b.lastThrowAt = R.now;
     const msg = makeThrow(i, kind, o, velTmp);
     msg.power = Math.round(power * 100) / 100;
+    if (kind === 'stone' && b.hot) {
+      msg.hot = 1;
+      b.hot = false;
+    }
     if (R.onThrow) R.onThrow(msg, i);
     R.addThrow(msg, i);
   }
@@ -702,6 +894,44 @@ export function createRound(opts) {
     }
   }
 
+  // ------------------------------------------------------------ hail: each shower breaks what was cracked and cracks a few more
+
+  const HAIL_WARN_MS = 2500;
+  function hail(t) {
+    for (const plan of R.hailPlan) {
+      if (!plan.warned && t >= plan.at - HAIL_WARN_MS) {
+        plan.warned = true;
+        emit({ type: 'hail', k: plan.k, at: plan.at });
+      }
+      if (plan.done || t < plan.at) continue;
+      plan.done = true;
+      for (let h = 0; h < n; h++) {
+        const house = R.houses[h];
+        if (!decides(h) || house.outAt >= 0) continue;
+        const rng = createRng(hash(`hail:${seedNum}:${R.roundNo}:${plan.k}:${h}`));
+        const broke = [];
+        const cracked = [];
+        // The hail never takes a house's last pane.
+        let left = glassCount(house.panes);
+        for (const p of rng.shuffle(Array.from({ length: PANES }, (_, q) => q))) {
+          if (house.panes[p] === CRACKED && left > 1) {
+            setPane(h, p, BROKEN, null);
+            house.gold &= ~(1 << p);
+            broke.push(p);
+            left--;
+          }
+        }
+        const glass = rng.shuffle(Array.from({ length: PANES }, (_, q) => q).filter((q) => house.panes[q] === GLASS));
+        for (const p of glass.slice(0, rules.hailPanes)) {
+          setPane(h, p, CRACKED, null);
+          cracked.push(p);
+        }
+        if (broke.length) R.stats[h].lost += broke.length;
+        if (broke.length || cracked.length) emit({ type: 'hailHit', house: h, panes: broke, cracked });
+      }
+    }
+  }
+
   // ------------------------------------------------------------ one tick
 
   function stepTick() {
@@ -709,8 +939,9 @@ export function createRound(opts) {
     const t = k * TICK_MS;
     R.now = t;
     if (R.isHost && !R.over) spawnSpecials(t);
+    if (R.hailPlan.length && !R.over) hail(t);
     for (let i = 0; i < n; i++) if (controls(i)) controlBody(i, TICK_MS);
-    windAt(field, seedNum, R.roundNo, t, wind);
+    windOf(t, wind);
     const live = R.stones;
     for (const s of live) {
       if (!s.alive) continue;
@@ -723,10 +954,12 @@ export function createRound(opts) {
       s.pz = s.z;
       const got = stepStone(s, field, wind, panesOf, R.bodies, hit);
       record(s, k);
+      if (s.y > s.apex) s.apex = s.y;
       if (got) resolve(s, hit, k);
       else if (t - s.born * TICK_MS > STONE_MAX_MS) {
         s.alive = false;
         s.end = k;
+        judge(s, 'miss');
       }
     }
     // Stones that meet in the air.
@@ -793,11 +1026,12 @@ export function createRound(opts) {
 
   // ------------------------------------------------------------ what other pages say
 
-  /** The deciding page's word on a house: glass and crack masks, with a version. */
-  R.setMask = function setMask(h, g, c, version, outAt) {
+  /** The deciding page's word on a house: glass and crack masks, with a version, and who knocked it out (a seat, or -1). */
+  R.setMask = function setMask(h, g, c, version, outAt, koBy = -1) {
     const house = R.houses[h];
     if (!house || decides(h)) return;
     if (version < house.version) return;
+    const wasOut = house.outAt >= 0;
     house.version = version;
     house.truth = panesFromMask(g >>> 0, c >>> 0, house.truth ?? new Uint8Array(PANES));
     for (let p = 0; p < PANES; p++) {
@@ -811,11 +1045,17 @@ export function createRound(opts) {
       const before = house.panes[p];
       house.panes[p] = v;
       house.pending.delete(p);
+      if (v === BROKEN) house.gold &= ~(1 << p);
       if (v > before) emit({ type: v === GLASS && before === BROKEN ? 'glazed' : 'unbreak', house: h, pane: p });
       else emit({ type: 'break', house: h, panes: v === BROKEN ? [p] : [], pane: p, cracked: v === CRACKED ? p : -1, remote: true });
     }
     if (outAt !== undefined && outAt >= 0 && house.outAt < 0) house.outAt = outAt;
     if (house.outAt < 0 && g === 0) house.outAt = R.now;
+    if (!wasOut && house.outAt >= 0) knockedOut(h, Number.isInteger(koBy) && koBy >= 0 && koBy < n ? koBy : house.lastBy, house.outAt);
+    else if (house.outAt >= 0 && koBy >= 0 && koBy < n && house.koBy < 0) {
+      house.koBy = koBy;
+      salvage(koBy, h);
+    }
   };
 
   /** Sets a house from a mask whoever decides it (a reloaded page taking its own house back). */
@@ -841,7 +1081,7 @@ export function createRound(opts) {
   R.maskOf = (h) => {
     const house = R.houses[h];
     const m = maskOf(house.panes);
-    return { g: m.g, c: m.c, v: house.version };
+    return { g: m.g, c: m.c, v: house.version, ko: house.koBy };
   };
 
   /** Whether a stone in the air is coming at this seat's house or body (for the warning, and the bots). */

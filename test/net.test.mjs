@@ -79,7 +79,7 @@ test('presence, house masks, specials and round data are cleaned', () => {
   assert.equal(p.h, null);
   assert.equal(p.gh, 1);
   assert.equal(readPresence({ g: -1 }).g, null);
-  assert.deepEqual(readHouses({ 'bot:1': { g: 3, c: 1, v: 2 }, bad: { g: 'x' }, worse: null }), { 'bot:1': { g: 3, c: 1, v: 2, out: -1 } });
+  assert.deepEqual(readHouses({ 'bot:1': { g: 3, c: 1, v: 2 }, bad: { g: 'x' }, worse: null }), { 'bot:1': { g: 3, c: 1, v: 2, out: -1, ko: '' } });
   assert.deepEqual(readHouses([1, 2]), {});
   assert.equal(readSpecials([{ id: 1, kind: 'brick', x: 1, z: 2, at: 25000, holder: 'ann' }, { id: 2, kind: 'anvil', x: 0, z: 0, at: 0 }]).length, 1);
   assert.equal(readRoundData({ street: 9, seed: 1, round: 1, ids: ['a'] }), null);

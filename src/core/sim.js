@@ -5,6 +5,7 @@ import { ROUND_MS, TICK_MS } from './config.js';
 import { buildField, STREETS } from './streets.js';
 import { createRound, rankHouses, glassCount } from './round.js';
 import { createBrain, PERSONAS, skillFor } from './bots.js';
+import { pickTwist } from './twists.js';
 
 /** The seats of a street's lineup, with an optional player-like brain in seat 0. */
 export function lineupSeats(streetIndex, opts = {}) {
@@ -23,10 +24,13 @@ export function lineupSeats(streetIndex, opts = {}) {
 export function createSimRound(streetIndex, seed, opts = {}) {
   const field = buildField(streetIndex);
   const seats = opts.seats ?? lineupSeats(streetIndex, opts);
+  const round = opts.round ?? 2;
   const R = createRound({
     field,
     seed,
-    round: opts.round ?? 2,
+    round,
+    twist: opts.twist ?? pickTwist(typeof seed === 'number' ? seed : 0, round),
+    rules: opts.rules,
     seats,
     brains: seats.map((s, i) => createBrain(s.persona, s.skill, `${seed}:${i}`)),
   });

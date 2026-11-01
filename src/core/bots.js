@@ -102,8 +102,13 @@ export function createBrain(personaId, skill, seed) {
       const f = R.field.houses[j];
       const d = Math.hypot(f.cx - (me.ghost ? me.gx : me.x), f.cz - (me.ghost ? me.gz : me.z));
       let w = P.target === 'nearest' ? (20 / d) ** 2 : (25 / d) ** 0.7;
-      // Everyone likes to finish a house off.
+      // Everyone likes to finish a house off, and the last pane pays (a pane of your own back).
       w *= 1 + (PANES - g) / 9;
+      if (g <= 2) w *= 2.2;
+      // On a horseshoe the end houses are furthest from everyone: the neighbours keep an eye on them.
+      if (!R.field.ring && (j === 0 || j === houses.length - 1)) w *= 1.25;
+      // A hot stone goes where two panes count: the house with the most glass, or one it can finish.
+      if (me.hot && (g === glassMax || g <= 2)) w *= 1.8;
       if (P.target === 'leader' && g === glassMax) w *= 3;
       if (P.target === 'weakest' || P.target === 'snipe') w *= 1 + (PANES - g) / (P.target === 'snipe' ? 8 : 5);
       if (P.target === 'snipe' && g === glassMax) w *= 1.8;
@@ -133,10 +138,16 @@ export function createBrain(personaId, skill, seed) {
   }
 
   function pickPane(R, j) {
-    const panes = R.houses[j].panes;
+    const house = R.houses[j];
+    const panes = house.panes;
     const glass = [];
     for (let p = 0; p < PANES; p++) if (panes[p] > 0) glass.push(p);
     if (!glass.length) return -1;
+    // Golden panes heat the next stone; cracked ones go with any hit (on a double-glazed street, that's the point).
+    const gold = glass.filter((p) => house.gold & (1 << p));
+    if (gold.length && rng.chance(0.35 + 0.4 * skill)) return rng.pick(gold);
+    const cracked = glass.filter((p) => panes[p] === 1);
+    if (cracked.length && rng.chance(R.rules?.doubleGlazing ? 0.75 : 0.3)) return rng.pick(cracked);
     // Ground floor a little more often: it's nearer.
     const low = glass.filter((p) => p < COLS);
     if (low.length && rng.chance(0.55)) return rng.pick(low);
@@ -156,7 +167,7 @@ export function createBrain(personaId, skill, seed) {
     else if (P.soft) options = [{ high: false }, { high: false, power: 0.5 }, { high: true }, { high: false, power: 0.9 }];
     else if (lobFirst) options = [{ high: true }, { high: true, power: 0.75 }, { high: false, power: 0.95 }, { high: false, power: 0.7 }];
     else options = [{ high: false, power: 0.95 }, { high: false, power: 0.75 }, { high: false }, { high: true }];
-    const wind = windAt(R.field, R.seed, R.roundNo, R.now, { x: 0, z: 0, s: 0 });
+    const wind = R.windAt ? R.windAt(R.now, { x: 0, z: 0, s: 0 }) : windAt(R.field, R.seed, R.roundNo, R.now, { x: 0, z: 0, s: 0 });
     const read = P.noWind ? 0 : clamp(sAcc * 1.1 - 0.05 + (P.wind ?? 0), 0, 1);
     for (const opt of options) {
       let aimAt = { x: point.x, y: point.y, z: point.z };
@@ -223,7 +234,7 @@ export function createBrain(personaId, skill, seed) {
   /** A throw that meets an incoming stone in the air: both share the wind and gravity, so their gap closes in a straight line. */
   function planIntercept(R, i, s) {
     const b = R.bodies[i];
-    const wind = windAt(R.field, R.seed, R.roundNo, R.now, { x: 0, z: 0, s: 0 });
+    const wind = R.windAt ? R.windAt(R.now, { x: 0, z: 0, s: 0 }) : windAt(R.field, R.seed, R.roundNo, R.now, { x: 0, z: 0, s: 0 });
     const ax = wind.x;
     const az = wind.z;
     const k = KINDS.stone;
@@ -270,7 +281,15 @@ export function createBrain(personaId, skill, seed) {
   }
 
   function threats(R, i) {
-    return R.incoming(i).filter((s) => s.kind !== 'pebble' && s.predAt - R.now > 350 && s.predAt - R.now < 2200);
+    const list = R.incoming(i).filter((s) => s.kind !== 'pebble' && s.predAt - R.now > 350 && s.predAt - R.now < 2200);
+    // A hot stone first: it takes two.
+    return list.sort((a, b) => (b.hot ? 1 : 0) - (a.hot ? 1 : 0));
+  }
+
+  /** Whether hail is due soon (a shower breaks every cracked pane). */
+  function hailSoon(R, within) {
+    for (const h of R.hailPlan ?? []) if (!h.done && h.at - R.now < within && h.at > R.now) return true;
+    return false;
   }
 
   function update(R, i, dtMs) {
@@ -327,7 +346,10 @@ export function createBrain(personaId, skill, seed) {
     if (st.mode === 'repair') {
       const g = glassCount(R.houses[i].panes);
       const danger = threats(R, i).length > 0 && rng.chance(0.5);
-      if (g >= st.goal || t > st.repairUntil || t >= STORE_CLOSE_MS || danger || R.houses[i].outAt >= 0) {
+      const closes = R.storeClose ?? STORE_CLOSE_MS;
+      const cracked = R.houses[i].panes.some((v) => v === 1);
+      const hailing = cracked && hailSoon(R, 14000);
+      if ((g >= st.goal && !hailing) || t > st.repairUntil || t >= closes || danger || R.houses[i].outAt >= 0) {
         st.mode = 'idle';
         inp.repair = false;
         st.nextAt = t + rng.range(150, 500);
@@ -417,7 +439,7 @@ export function createBrain(personaId, skill, seed) {
       for (const s of list) {
         if (s.id === st.lastSeenThrow) continue;
         st.lastSeenThrow = s.id;
-        if (!rng.chance(chance)) continue;
+        if (!rng.chance(s.hot ? Math.min(0.95, chance * 1.6 + 0.1) : chance)) continue;
         const sol = planIntercept(R, i, s);
         if (!sol) continue;
         st.aim = addError(sol, 0.6);
@@ -429,10 +451,15 @@ export function createBrain(personaId, skill, seed) {
       }
     }
 
-    // Repair while it's quiet.
-    if (t < STORE_CLOSE_MS - 1500 && g <= P.repairBelow && g < PANES && threats(R, i).length === 0 && rng.chance(0.7)) {
+    // Repair while it's quiet (a sale makes it cheap; hail on the way makes cracked panes worth fixing).
+    const closes = R.storeClose ?? STORE_CLOSE_MS;
+    const sale = (R.rules?.repairScale ?? 1) < 1;
+    const below = P.repairBelow + (sale ? 3 : 0);
+    const crackedHere = house.panes.some((v) => v === 1);
+    const hailing = crackedHere && hailSoon(R, 12000) && rng.chance(0.3 + 0.5 * skill);
+    if (t < closes - 1500 && ((g <= below && g < PANES) || hailing) && threats(R, i).length === 0 && rng.chance(0.7)) {
       st.mode = 'repair';
-      st.goal = Math.min(PANES, P.repairBelow + 1 + rng.int(3));
+      st.goal = Math.min(PANES, below + 1 + rng.int(3));
       st.repairUntil = t + rng.range(4000, 8000);
       inp.repair = true;
       return;

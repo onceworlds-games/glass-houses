@@ -20,7 +20,7 @@ export const STREETS = [
     lineup: ['twins', 'chad', 'sunny', 'ray', 'rosa'],
   },
   {
-    id: 'cliff-top', name: 'Cliff Top', R: 22, spread: 240, rot: 90, elev: [0, 0, 0, 0, 0, 0], centre: 'pine', light: 'haze',
+    id: 'cliff-top', name: 'Cliff Top', R: 22, spread: 280, rot: 90, elev: [0, 0, 0, 0, 0, 0], centre: 'pine', light: 'haze',
     wind: [0.5, 3.0], gust: 1, ice: false, skill: [0.4, 0.6], specialGap: [25000, 35000], sea: true,
     lineup: ['lindqvist', 'walt', 'chad', 'bev', 'sunny'],
   },

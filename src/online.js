@@ -10,6 +10,7 @@ import { readRoundData, readHouses, newerMask } from './core/net.js';
 import { STREETS, STREET_COUNT } from './core/streets.js';
 import { PERSONAS } from './core/bots.js';
 import { ROUND_SECONDS, ROUND_OPTIONS, POINTS } from './core/config.js';
+import { pickTwist } from './core/twists.js';
 
 export const JOIN = {
   maxPlayers: 6,
@@ -51,6 +52,7 @@ export function createOnline(opts) {
   let stateAt = 0;
   let lastSpecials = '';
   let ended = '';
+  let lastTwist = '';
 
   const sync = createSync({
     myId: room.me.id,
@@ -83,7 +85,12 @@ export function createOnline(opts) {
       // Everyone moves one house along each round.
       const k = (m.round - 1) % Math.max(1, ids.length);
       const order = ids.slice(k).concat(ids.slice(0, k));
-      return { street: streetSetting(), seed: m.random(`seed:${m.roundId}`).int(2147483647), round: m.round, ids: order };
+      const seed = m.random(`seed:${m.roundId}`).int(2147483647);
+      // The Gazette's twist for the round: calm in round 1, never the same twice running.
+      if (m.round <= 1) lastTwist = '';
+      const twist = pickTwist(seed, m.round, lastTwist);
+      lastTwist = twist;
+      return { street: streetSetting(), seed, round: m.round, ids: order, twist };
     },
     onTick(m) {
       const R = sync.R;

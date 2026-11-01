@@ -3,6 +3,7 @@
 
 import { KINDS, KIND_IDS, TICK_MS, LATE_MAX_MS, PANES, GHOST_Y, EYE, ROUND_MS } from './config.js';
 import { inLawn } from './streets.js';
+import { isTwist } from './twists.js';
 
 const MASK = (1 << PANES) - 1;
 const MAX_MM = 200000; // 200 m: nothing in the world is further from the centre
@@ -45,6 +46,8 @@ export function checkThrow(msg, ctx) {
   if (!Array.isArray(msg.o) || msg.o.length !== 3 || !Array.isArray(msg.v) || msg.v.length !== 3) return 'shape';
   for (let i = 0; i < 3; i++) if (!isInt(msg.o[i], -MAX_MM, MAX_MM) || !isInt(msg.v[i], -60000, 60000)) return 'shape';
   if (!isInt(msg.tk, 0, Math.ceil((ROUND_MS + 30000) / TICK_MS))) return 'shape';
+  if (msg.hot !== undefined && msg.hot !== 1) return 'shape';
+  if (msg.hot === 1 && msg.kind !== 'stone') return 'kind';
   const seat = ctx.seatOf(msg.by);
   if (seat < 0) return 'seat';
   // Bots' throws come from the host; a player throws only for themselves.
@@ -94,6 +97,8 @@ export function readPresence(p) {
     gz: num(p.gz, -200, 200, 0),
     r: isId(p.r) ? p.r : '',
     out: isNum(p.out, 0, 1e9) ? p.out : -1,
+    ko: isId(p.ko) ? p.ko : '',
+    lk: readLook(p.lk),
   };
 }
 
@@ -106,7 +111,7 @@ export function readHouses(value) {
     if (++n > 32) break;
     if (!isId(id) || !m || typeof m !== 'object') continue;
     if (!isInt(m.g, 0, MASK) || !isInt(m.v, 0, 1e9)) continue;
-    out[id] = { g: m.g, c: isInt(m.c, 0, MASK) ? m.c & m.g : 0, v: m.v, out: isNum(m.out, 0, 1e9) ? m.out : -1 };
+    out[id] = { g: m.g, c: isInt(m.c, 0, MASK) ? m.c & m.g : 0, v: m.v, out: isNum(m.out, 0, 1e9) ? m.out : -1, ko: isId(m.ko) ? m.ko : '' };
   }
   return out;
 }
@@ -145,7 +150,13 @@ export function readRoundData(d) {
   if (!Array.isArray(d.ids) || d.ids.length < 1 || d.ids.length > 6 || !d.ids.every(isId)) return null;
   const out = {};
   if (d.out && typeof d.out === 'object') for (const [k, v] of Object.entries(d.out)) if (isId(k) && isNum(v, 0, 1e9)) out[k] = v;
-  return { street: d.street, seed: d.seed, round: d.round, ids: d.ids.slice(), out, end: isNum(d.end, 0, 1e9) ? d.end : -1 };
+  return { street: d.street, seed: d.seed, round: d.round, ids: d.ids.slice(), out, end: isNum(d.end, 0, 1e9) ? d.end : -1, twist: isTwist(d.twist) ? d.twist : 'quiet', daily: isInt(d.daily, 1, 1e6) ? d.daily : 0 };
+}
+
+/** What a player shows the street (their stone, trail, glass and lawn): four small numbers, or null. */
+export function readLook(v) {
+  if (!Array.isArray(v) || v.length !== 4) return null;
+  return v.every((x) => isInt(x, 0, 63)) ? v.slice() : null;
 }
 
 /** Who decides a house: its owner's page while they're connected; the host for bots and for players who are away or gone. */
