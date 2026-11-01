@@ -134,5 +134,5 @@ test('a broken save becomes a fresh profile', () => {
   assert.deepEqual(p.stars.slice(0, 4), [0, 0, 0, 2]);
   assert.equal(p.panes, 0);
   assert.deepEqual(p.hints, { throw: true });
-  assert.equal(BADGES.length, 10);
+  assert.equal(BADGES.length, 20);
 });

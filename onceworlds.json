@@ -17,8 +17,23 @@
     { "id": "gnome-run", "name": "Gnome Run", "description": "Break 2 panes with one gnome.", "icon": "store/badge-gnome-run.png" },
     { "id": "fore", "name": "Fore!", "description": "Bonk a neighbour.", "icon": "store/badge-fore.png" },
     { "id": "house-proud", "name": "House Proud", "description": "Win a match.", "icon": "store/badge-house-proud.png" },
-    { "id": "the-whole-street", "name": "The Whole Street", "description": "Win a round on all eight streets.", "icon": "store/badge-the-whole-street.png" }
+    { "id": "the-whole-street", "name": "The Whole Street", "description": "Win a round on all eight streets.", "icon": "store/badge-the-whole-street.png" },
+    { "id": "hot-hands", "name": "Hot Hands", "description": "Throw a hot stone: three glass hits in a row.", "icon": "store/badge-hot-hands.png" },
+    { "id": "firefighter", "name": "Firefighter", "description": "Knock a hot stone out of the air.", "icon": "store/badge-firefighter.png" },
+    { "id": "salvage", "name": "Salvage", "description": "Win a pane back by knocking a house out.", "icon": "store/badge-salvage.png" },
+    { "id": "long-shot", "name": "Long Shot", "description": "Break a pane from right across the street.", "icon": "store/badge-long-shot.png" },
+    { "id": "daily-paper", "name": "Daily Paper", "description": "Play the Daily Street.", "icon": "store/badge-daily-paper.png" },
+    { "id": "job-done", "name": "Job Done", "description": "Finish all three of a day's jobs.", "icon": "store/badge-job-done.png" },
+    { "id": "regular", "name": "Regular", "description": "Play three days in a row.", "icon": "store/badge-regular.png" },
+    { "id": "neighbourhood-watch", "name": "Neighbourhood Watch", "description": "Play seven days in a row.", "icon": "store/badge-neighbourhood-watch.png" },
+    { "id": "rock-hound", "name": "Rock Hound", "description": "Reach level 10.", "icon": "store/badge-rock-hound.png" },
+    { "id": "street-legend", "name": "Street Legend", "description": "Reach level 30.", "icon": "store/badge-street-legend.png" }
   ],
+  "data": {
+    "daily-wall": { "type": "list", "max": 100, "bytes": 160 },
+    "daily-plays": { "type": "counter", "add": 1, "reset": "daily" },
+    "panes-today": { "type": "counter", "add": [1, 120], "reset": "daily" }
+  },
   "controls": [
     { "keys": ["Mouse"], "action": "Aim (click in the street first)" },
     { "keys": ["Hold Click", "Hold Space"], "action": "Wind up, let go to throw" },
