@@ -516,10 +516,39 @@ export const sound = {
       tone(f / 2, 'sine', k * 0.09, 0.3, 0.08, dest);
     });
   },
-  /** XP ticking up. */
+  /** A line printed on the receipt: the till's key coming down, a little higher each line. */
   tick(k = 0) {
     if (!ok()) return;
-    tone(1200 + k * 40, 'square', 0, 0.02, 0.05, out(0, 0));
+    const dest = out(0, 0);
+    const n = noise(0.05);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 2400 + k * 90;
+    bp.Q.value = 3;
+    const g = ctx.createGain();
+    env(g, ctx.currentTime, 0.002, 0.32, 0.045);
+    n.connect(bp);
+    bp.connect(g);
+    g.connect(dest);
+    tone(180 + k * 6, 'triangle', 0, 0.06, 0.22, dest, 120);
+    tone(1200 + k * 40, 'square', 0.005, 0.02, 0.04, dest);
+  },
+  /** The total: the drawer springs out and the bell rings. */
+  till() {
+    if (!ok()) return;
+    const dest = out(0, 0);
+    const n = noise(0.12);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 900;
+    bp.Q.value = 1.2;
+    const g = ctx.createGain();
+    env(g, ctx.currentTime, 0.003, 0.35, 0.12);
+    n.connect(bp);
+    bp.connect(g);
+    g.connect(dest);
+    tone(90, 'triangle', 0, 0.16, 0.3, dest, 60);
+    for (const [f, v] of [[2093, 0.2], [2637, 0.12], [4186, 0.05]]) tone(f, 'sine', 0.05, 1.4, v, dest);
   },
   /** A dog's bark across the lawns. */
   bark(dist, pan) {

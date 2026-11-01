@@ -247,6 +247,7 @@ export function createCareerUI(root, titleEl, opts = {}) {
       });
       const tot = el('div', 'tot', rc);
       tot.style.animationDelay = `${0.35 + lines.length * 0.16}s`;
+      xpTimers.push(setTimeout(() => opts.sound?.till?.(), 350 + lines.length * 160));
       el('span', '', tot).textContent = 'Total';
       el('b', '', tot).textContent = `+${num(res.xp.total)} XP`;
       const before = levelFor(Math.max(0, profileXp - res.xp.total));

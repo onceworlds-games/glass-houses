@@ -115,7 +115,7 @@ async function boot() {
     onDailyAgain: () => startDaily(),
     onDailyBack: () => backToTitle(),
     thumb: (key) => thumb(key),
-    sound: { tick: (k) => sound.tick(k), levelUp: () => sound.levelUp() },
+    sound: { tick: (k) => sound.tick(k), till: () => sound.till(), levelUp: () => sound.levelUp() },
   });
   /** Today, as the platform's clock has it (a UTC day number). */
   const today = () => {
@@ -1695,7 +1695,8 @@ async function boot() {
     } else sound.windup(0);
     ambience(wind.s, dt, { night: STREETS[W.index]?.light === 'night', snow: snowy(), quiet: isTitle || isLocker });
     if (!isTitle && !isLocker) {
-      let mode = 'menu';
+      // After a round the band keeps playing, a little softer, under the receipt.
+      let mode = phase === 'roundEnd' || phase === 'results' ? 'results' : 'menu';
       if (phase === 'round' || phase === 'intro') {
         const alive = R.alive();
         mode = alive <= 2 ? 'frantic' : alive <= 3 ? 'tense' : R.now >= R.storeClose ? 'late' : 'play';

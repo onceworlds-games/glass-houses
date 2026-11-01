@@ -123,7 +123,7 @@ function schedule() {
     const bar = Math.floor(step / 8) % prog.length;
     const e = step % 8;
     const chord = prog[bar];
-    const loud = mode === 'menu' ? 0.55 : 1;
+    const loud = mode === 'menu' ? 0.55 : mode === 'results' ? 0.85 : 1;
     // Swing: the off-beat eighths come late.
     const swingT = e % 2 ? t + eighth * 0.32 : t;
     if (e % 2 === 0) {

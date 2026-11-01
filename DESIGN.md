@@ -444,14 +444,16 @@ Everything is saved with `ow.save` (`profile`), written at a round's end, never 
 All big words and numbers are **house numerals**: cream or ink letters on enamel plates in the owner's colour, with a hard
 offset shadow as if mounted on a wall in a low sun. No dark boxes behind HUD items, no glassy panels.
 
-1. **Title.** The 3D attract round fills the screen (a crane shot that orbits the green, cutting to a close shot when a house
-   falls). "Glass Houses" in two lines of big mounted letters, top left. Top right, your career: level on a gold starburst,
+1. **Title.** The 3D attract round fills the screen (a slow dolly along the inside of the lawns, looking ahead along the
+   glass fronts curving away to the right with the oak out of shot; a cut to a close shot when a house falls). "Glass Houses" in two lines of big mounted letters, top left. Top right, your career: level on a gold starburst,
    rank, XP bar, the day streak's flame; under it today's jobs on a clipboard and the panes the whole street broke today.
    Bottom centre, one tall **Play** door in tangerine with a brass knob (Space or Enter on desktop), the **Locker** door on its
    left ("New" when a look unlocked) and the **Daily Street** on its right (today's street, twist and your best). The
    platform's Ready strip is hidden on the title.
-   - **Locker:** the camera behind your own lawn, tabs for Stone, Trail, Glass and Lawn, a tile per look; your house tries each
-     one on (a stone thrown every two seconds with the camera chasing it, the glass tinted, the lawn dressed).
+   - **Locker:** tabs for Stone, Trail, Glass and Lawn, a tile per look; your house tries each one on (a stone thrown every two
+     seconds with the camera chasing it, the glass tinted, the lawn dressed). For glass and lawn the camera frames the front or
+     the piece on show in the part of the screen the sheet leaves free (beside it on a wide screen, above it on a phone),
+     standing in front of the oak. The menu tune plays.
    - **Daily Street:** the Gazette (the day's street and twist), the camera down onto your lawn, a round against the street's
      five. Out early: watch as a ghost or skip to the end. Then the receipt and the Daily Street's page: your score, your best,
      the wall of the day's best, Again or Done. Esc pauses it.
@@ -580,7 +582,8 @@ pills, a dimmed title card, purple and teal neon.
 
 ## Sound
 
-All synthesized with Web Audio; distance attenuates and low-passes far sounds.
+All synthesized with Web Audio; distance attenuates and low-passes far sounds. The mix goes through a compressor and a soft
+limiter, so a knockout over a shower of glass bends instead of clipping.
 
 | Action | Sound |
 |---|---|
@@ -606,13 +609,13 @@ All synthesized with Web Audio; distance attenuates and low-passes far sounds.
 | Salvage | Four rising bells |
 | Hail | A rattle of ice ticks on everything for the shower's length |
 | The Gazette | A slap and a rustle as the paper lands |
-| The receipt | A till tick per line, rising; a level up plays a fanfare |
+| The receipt | A till key per line (a clack and a thunk, rising); the drawer and the bell on the total; a level up plays a fanfare |
 | The dog | Two barks across the lawns when the glass goes |
 | Ambience | Wind (by strength), the fountain, golden-hour birds (crickets at night, muffled hush in snow) |
 
 **Music:** a cool lounge-jazz loop from a small sequencer: walking upright bass (a plucked triangle), brushed snare and ride
-(filtered noise), vibraphone chords with tremolo, a ii-V-I in D minor at 112 BPM. Quieter in menus (bass and vibes only). It
-gets frantic as houses fall: 3 houses left adds bongos and fills, 2 left raises the tempo to 128, and after the store closes
+(filtered noise), vibraphone chords with tremolo, a ii-V-I in D minor at 112 BPM. Quieter in menus (bass and vibes only);
+after a round the whole band keeps playing a little softer under the receipt. It gets frantic as houses fall: 3 houses left adds bongos and fills, 2 left raises the tempo to 128, and after the store closes
 the vibes play a tense two-chord vamp.
 
 ## Store art and the trailer
