@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { createStage } from './view/stage.js';
 import { createWorld } from './view/world.js';
 import { makeArm } from './view/people.js';
+import { loadRigs } from './view/rig.js';
 import { createInput } from './view/input.js';
 import { createUI } from './view/ui.js';
 import { startAudio, audioContext, sound, ambience, hush } from './view/audio.js';
@@ -55,6 +56,7 @@ async function boot() {
     }
   }
   let joining = joinRoom(ow);
+  const rigs = loadRigs(8000);
 
   const canvas = document.getElementById('view');
   const uiRoot = document.getElementById('ui');
@@ -107,6 +109,7 @@ async function boot() {
   }
 
   const { camera } = stage;
+  await rigs;
   const W = createWorld(stage);
   W.setStreet(0);
   let profile = readProfile(null);

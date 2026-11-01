@@ -7,6 +7,8 @@ import { createSimRound } from '../core/sim.js';
 import { createRng } from '../core/rng.js';
 import { solveAim, velocityOf, handOf, tracePath, NO_WIND, paneCentre } from '../core/physics.js';
 import { PANES, BROKEN, GLASS, CRACKED } from '../core/config.js';
+import { loadRigs } from './rig.js';
+import { makeArm } from './people.js';
 
 const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
 
@@ -31,8 +33,9 @@ export async function runPoster(params) {
   canvas.style.height = `${h}px`;
   const stage = createStage(canvas, { preserve: true, quality: 'high' });
   stage.resize(w, h, 1);
+  await loadRigs();
   const W = createWorld(stage);
-  const stages = { cover, action, win, multi, icon, look };
+  const stages = { cover, action, win, multi, icon, look, people, fp };
   const run = stages[name] ?? cover;
   run(stage, W, w, h, params);
   stage.render(12);
@@ -323,6 +326,122 @@ function look(stage, W, w, h, params) {
     const up = Number(params.get('up') ?? 1.7);
     lookFrom(stage, hh.cx + hh.fx * d + hh.rx * sd, hh.elev + up, hh.cz + hh.fz * d + hh.rz * sd, hh.cx + hh.rx * sd * 0.3, hh.elev + Number(params.get('aty') ?? 3), hh.cz + hh.rz * sd * 0.3, Number(params.get('fov') ?? 60));
   }
+  void w;
+  void h;
+}
+
+/**
+ * The people, close: the street's six in a row on a lawn, each in a pose (?pose=idle,run,left,wind,throw,hit... per seat; ?at= s
+ * into it; ?personas= to recast), the camera in front (?dist=, ?up=, ?aty=, ?side=, ?fov=).
+ */
+function people(stage, W, w, h, params) {
+  const street = Number(params.get('street') ?? 0);
+  const R = round(street, 4242, 2000);
+  const cast = params.get('personas') ? params.get('personas').split(',') : R.seats.map((s) => s.persona);
+  W.setStreet(R.field.index, 'high');
+  W.cast(cast);
+  W.me = -1;
+  const hh = R.field.houses[Number(params.get('house') ?? 0)];
+  const poses = (params.get('pose') ?? 'idle').split(',');
+  const at = Number(params.get('at') ?? 0.5);
+  const gap = Number(params.get('gap') ?? 1.3);
+  const d = Number(params.get('dist') ?? 5);
+  const sd = Number(params.get('side') ?? 0);
+  const cam = { x: hh.cx + hh.fx * (6 + d) + hh.rx * sd, y: hh.elev + Number(params.get('up') ?? 1.3), z: hh.cz + hh.fz * (6 + d) + hh.rz * sd };
+  draw(W, R);
+  for (let i = 0; i < 6; i++) {
+    const b = R.bodies[i];
+    const u = (i - 2.5) * gap;
+    b.x = hh.cx + hh.fx * 6 + hh.rx * u;
+    b.z = hh.cz + hh.fz * 6 + hh.rz * u;
+    b.y = hh.elev;
+    b.yaw = Math.atan2(-(cam.x - b.x), -(cam.z - b.z)) + Number(params.get('turn') ?? 0);
+    b.pitch = 0.1;
+    const pose = poses[i % poses.length];
+    const fwd = { x: -Math.sin(b.yaw), z: -Math.cos(b.yaw) };
+    const rt = { x: Math.cos(b.yaw), z: -Math.sin(b.yaw) };
+    const sp = pose === 'walk' ? 1.6 : 3.8;
+    const v = { run: fwd, walk: fwd, back: { x: -fwd.x, z: -fwd.z }, left: { x: -rt.x, z: -rt.z }, right: rt }[pose];
+    b.vx = v ? v.x * sp : 0;
+    b.vz = v ? v.z * sp : 0;
+    b.winding = pose === 'wind';
+    const pw = params.get('powers') ? params.get('powers').split(',').map(Number) : null;
+    b.power = pose === 'wind' ? (pw ? pw[i % pw.length] : Number(params.get('power') ?? 0.8)) : 0;
+    b.repairing = pose === 'repair';
+    b.ammo = 3;
+    b.held = null;
+    b.lastThrowAt = -1e9;
+    b.stunUntil = -1;
+    const ats = params.get('ats') ? params.get('ats').split(',').map(Number) : null;
+    const steps = Math.round((ats ? ats[i % ats.length] : at) * 60);
+    const f = W.figures[i];
+    if (pose === 'ghost') {
+      b.ghost = true;
+      b.gx = b.x;
+      b.gz = b.z;
+      b.gy = hh.elev + 2.2;
+    }
+    if (pose === 'hit') b.stunUntil = R.now + 5000;
+    if (pose === 'wave') f.wave();
+    if (pose === 'cheer') f.cheer();
+    if (pose === 'throw') {
+      // Drawn back first, then let go.
+      b.winding = true;
+      b.power = 0.9;
+      for (let k = 0; k < 30; k++) f.update(b, R.now, 1 / 60, false);
+      b.winding = false;
+      b.lastThrowAt = R.now;
+    }
+    for (let k = 0; k < Math.max(1, steps); k++) f.update(b, R.now + (pose === 'throw' ? k * 16.7 : 0), 1 / 60, false);
+  }
+  for (let k = 0; k < 40; k++) W.street.update(0.05, 12 + k * 0.05, R.windNow());
+  lookFrom(stage, cam.x, cam.y, cam.z, hh.cx + hh.fx * 6 + hh.rx * sd * 0.3, hh.elev + Number(params.get('aty') ?? 1.0), hh.cz + hh.fz * 6 + hh.rz * sd * 0.3, Number(params.get('fov') ?? 50));
+  void w;
+  void h;
+}
+
+/** First person: the arm and hand at a moment of the throw (?pose=rest|wind|throw|repair, ?power=, ?at= s after release). */
+function fp(stage, W, w, h, params) {
+  const street = Number(params.get('street') ?? 0);
+  const R = round(street, 4242, 4000);
+  setup(W, R);
+  const me = Number(params.get('seat') ?? 0);
+  W.me = me;
+  W.hideMe = true;
+  const b = R.bodies[me];
+  const tgt = R.field.houses[Number(params.get('target') ?? 3)];
+  const pane = paneCentre(tgt, 15, {});
+  const aim = solveAim(b.x, b.y, b.z, pane, 'stone', { extra: 0.04 });
+  b.yaw = aim?.yaw ?? b.yaw;
+  b.pitch = Number(params.get('pitch') ?? 0.05);
+  b.vx = b.vz = 0;
+  b.ammo = 4;
+  b.held = params.get('held') || null;
+  b.lastThrowAt = -1e9;
+  b.stunUntil = -1;
+  const pose = params.get('pose') ?? 'rest';
+  const arm = makeArm(me);
+  stage.camera.add(arm.group);
+  draw(W, R);
+  b.winding = pose === 'wind';
+  b.power = Number(params.get('power') ?? 0.8);
+  b.repairing = pose === 'repair';
+  for (let k = 0; k < 40; k++) arm.update(b, R.now + k * 16, 1 / 60, false);
+  if (pose === 'throw') {
+    b.winding = true;
+    for (let k = 0; k < 30; k++) arm.update(b, R.now, 1 / 60, false);
+    b.winding = false;
+    b.lastThrowAt = R.now;
+    const n = Math.round(Number(params.get('at') ?? 0.05) * 60);
+    for (let k = 0; k <= n; k++) arm.update(b, R.now + k * 16.7, 1 / 60, false);
+  }
+  for (let k = 0; k < 40; k++) W.street.update(0.05, 12 + k * 0.05, R.windNow());
+  const c = stage.camera;
+  c.position.set(b.x, b.y + 1.6, b.z);
+  c.rotation.set(b.pitch, b.yaw, 0);
+  c.fov = Number(params.get('fov') ?? 70);
+  c.updateProjectionMatrix();
+  c.updateMatrixWorld(true);
   void w;
   void h;
 }
