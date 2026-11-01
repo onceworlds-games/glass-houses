@@ -635,11 +635,17 @@ Every picture is drawn by the game's own renderer from a real round frozen at it
   sparkles, two clacking stones, a gnome, a head with stars, a sunburst with a check, eight panes round a lawn; a stone on
   fire, a hot stone knocked down, a pane with a curved arrow, a dotted arc across to a cracked pane, the Gazette, a clipboard
   of ticks, calendar pages for 3 and 7 days, a level starburst, a crowned one).
-- **Trailer** (`store/trailer.mp4`): see the end of this section once cut. Captured with `vcap` from a local build served
-  on its own. The capture hooks are local only: `?autoplay=1` (this page plays itself with the bot brain), `?daily=auto` (the
+- **Trailer** (`store/trailer.mp4`, 21 s, 1280x720, 30 fps, the game's own sound): six hard cuts from one Daily Street (Palm
+  Court in a heatwave, played by the bot brain). A hot stone glowing in hand and thrown in a streak of fire; from beside a
+  pink glass front, a hot stone bursting a pane; the Gazette's "Heatwave" front page flying off as "Go!" drops and "Break
+  their glass" shows; first-person throws with the plates counting down; the last minute with ghosts over the green, the
+  final knockout (a cut to the house that fell, the KO stamp), "Your house stands" and the receipt printing up to Level 4;
+  stained glass tried on in the Locker; "Glass Houses" over the street. Captured with `vcap` from a local build served on
+  its own. The capture hooks are local only: `?autoplay=1` (this page plays itself with the bot brain), `?daily=auto` (the
   Daily Street plays itself), `?hush=1` (no sound until `__glass.hush(false)`) and `window.__glass` (the camera: first
-  person, `chase`, `orbit`, `weak` or `stone`, which waits beside the glass a stone is about to hit; `playDaily()`, `dailySkip(ms)`; the round clock; standing houses; breaks
-  seen; draw calls). The loop reads `performance.now()`, so a capture's virtual time drives everything.
+  person, `chase`, `orbit`, `weak` or `stone`, which waits beside the glass a stone is about to hit; `playDaily(day)`,
+  `dailySkip(ms)`; the round clock; standing houses; breaks seen; draw calls). The loop reads `performance.now()`, so a
+  capture's virtual time drives everything.
 
 ## Originality check
 
