@@ -398,7 +398,24 @@ export function createGlass(field, scene, quality = 'medium') {
   shardGeo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
   shardGeo.setIndex(idx);
   shardGeo.computeVertexNormals();
-  const shardMat = new THREE.MeshStandardMaterial({ color: '#A9D8D6', metalness: 0.75, roughness: 0.03, envMapIntensity: 2.4, side: THREE.DoubleSide, emissive: new THREE.Color('#7FC9CC'), emissiveIntensity: 0.18, transparent: true, opacity: 0.78 });
+  const shardMat = new THREE.MeshStandardMaterial({ color: '#A9D8D6', metalness: 0.75, roughness: 0.03, envMapIntensity: 2.4, side: THREE.DoubleSide, emissive: new THREE.Color('#7FC9CC'), emissiveIntensity: 0.18, transparent: true, opacity: 0.8 });
+  // Each shard glints white as it turns edge-on (so a spinning one twinkles), and burns white for a moment as it leaves.
+  shardMat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      `#include <emissivemap_fragment>
+      {
+        float glint = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 3.0);
+        #if defined( USE_INSTANCING_COLOR ) || defined( USE_COLOR )
+        float leaving = max(0.0, vColor.r - 1.2);
+        #else
+        float leaving = 0.0;
+        #endif
+        totalEmissiveRadiance += vec3(1.0, 0.97, 0.9) * (glint * 1.1 + leaving * 0.45);
+      }`,
+    );
+  };
+  shardMat.customProgramCacheKey = () => 'glass-shard';
   // Lying in the grass: mostly see-through, a glint where the sun finds it.
   const pileMat = new THREE.MeshStandardMaterial({ color: '#9CCBCB', metalness: 0.6, roughness: 0.04, envMapIntensity: 1.6, side: THREE.DoubleSide, transparent: true, opacity: 0.42, depthWrite: false });
   const shards = new THREE.InstancedMesh(shardGeo, shardMat, cap);

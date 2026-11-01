@@ -241,6 +241,13 @@ export function createFeel(root) {
     },
 
     /** Everything off (a new round, the title). */
+    /** The round's over: trick stamps still waiting are dropped (the receipt lists them), the one showing goes. */
+    quiet() {
+      queue.length = 0;
+      stampUntil = 0;
+      stamp.classList.remove('on');
+    },
+
     clear() {
       queue.length = 0;
       stampUntil = 0;

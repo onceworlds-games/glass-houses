@@ -37,7 +37,20 @@ export function startAudio() {
   comp.threshold.value = -14;
   comp.ratio.value = 4;
   master.connect(comp);
-  comp.connect(ctx.destination);
+  // Then a soft limiter, so a knockout's sting over a shower of glass bends instead of clipping.
+  const pre = ctx.createGain();
+  pre.gain.value = 0.5;
+  const soft = ctx.createWaveShaper();
+  const curve = new Float32Array(2049);
+  for (let i = 0; i < curve.length; i++) {
+    const x = (i / (curve.length - 1)) * 2 - 1;
+    curve[i] = (0.97 * Math.tanh(2 * x)) / Math.tanh(2);
+  }
+  soft.curve = curve;
+  soft.oversample = '2x';
+  comp.connect(pre);
+  pre.connect(soft);
+  soft.connect(ctx.destination);
   sfx = ctx.createGain();
   sfx.gain.value = 0.9;
   sfx.connect(master);

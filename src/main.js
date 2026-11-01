@@ -1162,6 +1162,9 @@ async function boot() {
   function openLocker() {
     if (screen !== 'title') return;
     startAudio();
+    // The menu tune plays while you try things on.
+    music.start();
+    music.set('menu');
     sound.click();
     const seats = lineupSeats(0);
     locker = { R: createRound({ field: buildField(0), seed: 5, round: 1, seats, host: true }), ms: 0, next: performance.now() + 600, look: { ...profile.look } };
@@ -1253,14 +1256,18 @@ async function boot() {
   }
 
   /** The trailer's stone camera: rides behind a stone headed for glass (yours first), then watches it land. */
+  // The stone camera (captures): beside the glass a stone is about to hit, so it flies in and the pane bursts toward the lens.
+  // Yours first, hot ones before cold; it holds a beat on the hit, then cuts to the next.
+  const impact = new THREE.Vector3();
   function stoneCam(R, me, now, dt) {
     let s = null;
     for (const o of R.stones) if (o.id === camStone && o.alive) s = o;
     if (!s && now > camHoldUntil) {
       let score = -Infinity;
       for (const o of R.stones) {
-        if (!o.alive || o.kind === 'pebble' || o.pred !== 'glass' || o.pendingUntil !== undefined || o.y < 1) continue;
-        const v = (o.seat === me ? 1e6 : 0) + o.born;
+        const left = (o.predAt ?? 0) - R.now;
+        if (!o.alive || o.kind === 'pebble' || o.pred !== 'glass' || o.predHouse === me || left < 450 || left > 2600) continue;
+        const v = (o.seat === me ? 2e6 : 0) + (o.hot ? 1e6 : 0) - left;
         if (v > score) {
           score = v;
           s = o;
@@ -1268,27 +1275,22 @@ async function boot() {
       }
       if (s) {
         camStone = s.id;
+        const hh = R.field.houses[s.predHouse];
+        impact.set(s.predX, s.predY, s.predZ);
+        // On the side the stone isn't coming from, a few strides out on the lawn, eye level with the pane.
         const h = Math.hypot(s.vx, s.vz) || 1;
-        camPos.set(s.x - (s.vx / h) * 4.5 - (s.vz / h) * 1.6, s.y + 1.3, s.z - (s.vz / h) * 4.5 + (s.vx / h) * 1.6);
-        camLook.set(s.x + s.vx * 0.35, s.y + s.vy * 0.35, s.z + s.vz * 0.35);
+        const along = (s.vx / h) * hh.rx + (s.vz / h) * hh.rz;
+        const side = along > 0 ? 1 : -1;
+        camPos.set(impact.x + hh.fx * 5.2 + hh.rx * side * 3.2, impact.y + 0.5, impact.z + hh.fz * 5.2 + hh.rz * side * 3.2);
+        camLook.set(impact.x - hh.rx * side * 0.9 + hh.fx * 0.6, impact.y - 0.15, impact.z - hh.rz * side * 0.9 + hh.fz * 0.6);
+        stoneLast.copy(camLook);
       }
     }
-    if (s) {
-      camHoldUntil = now + 1300;
-      const h = Math.hypot(s.vx, s.vz) || 1;
-      // Behind it and a little to its right: the thrower stays out of the lens.
-      tv.set(s.x - (s.vx / h) * 4.5 - (s.vz / h) * 1.6, s.y + 1.3, s.z - (s.vz / h) * 4.5 + (s.vx / h) * 1.6);
-      tl.set(s.x + s.vx * 0.3, s.y + s.vy * 0.3, s.z + s.vz * 0.3);
-      // It stops a few strides short of the glass and watches the stone go in, the whole front in view.
-      const hh = R.field.houses[s.predHouse];
-      if (hh && (tv.x - hh.cx) * hh.fx + (tv.z - hh.cz) * hh.fz < 6) tv.copy(camPos);
-      stoneLast.set(s.x, s.y, s.z);
-      lookAtSmooth(tv, tl, dt, 9);
-    } else {
-      // Between stones the camera stays put and turns to where the last one went.
-      tv.copy(camPos);
-      lookAtSmooth(tv, stoneLast, dt, 5);
-    }
+    if (s) camHoldUntil = now + 1100;
+    // A slow push in on the glass, held through the hit.
+    tv.copy(camPos);
+    if (camPos.distanceTo(stoneLast) > 3.6) tv.lerp(stoneLast, Math.min(0.25, dt * 0.35));
+    lookAtSmooth(tv, stoneLast, dt, 6);
   }
 
   /** The standing house with the least glass, not yours (-1 when there's none). */
@@ -1301,13 +1303,45 @@ async function boot() {
     return h;
   }
 
-  function houseShot(R, h, t, dt, push = 0) {
+  function houseShot(R, h, t, dt, push = 0, cut = false) {
     const hh = R.field.houses[h];
     const d = 15 - push * 5;
     const side = Math.sin(t * 0.0003) * 2.5;
     tv.set(hh.cx + hh.fx * d + hh.rx * side, hh.elev + 3.2 + push, hh.cz + hh.fz * d + hh.rz * side);
     tl.set(hh.cx, hh.elev + 2.6, hh.cz);
+    if (cut) {
+      camPos.copy(tv);
+      camLook.copy(tl);
+    }
     lookAtSmooth(tv, tl, dt, 2);
+  }
+
+  // A round's end: when it ended on a knockout, a held beat on the house that fell, then a cut to the one left standing (cuts,
+  // so the lens never swings through the oak to get there).
+  const endBeat = { R: null, t0: 0, fell: -1, key: -2 };
+  const END_BEAT_MS = 1700;
+  /** Still on the house that fell (the plate for the one standing waits for the cut). */
+  const endHolding = () => endBeat.fell >= 0 && endBeat.key === endBeat.fell && performance.now() - endBeat.t0 < END_BEAT_MS;
+  function endShot(R, winner, now, dt, push) {
+    if (endBeat.R !== R) {
+      endBeat.R = R;
+      endBeat.t0 = now;
+      endBeat.key = -2;
+      let at = -1;
+      endBeat.fell = -1;
+      R.houses.forEach((h, i) => {
+        if (h.outAt > at) {
+          at = h.outAt;
+          endBeat.fell = i;
+        }
+      });
+      if (endBeat.fell === winner || R.now - at > 600) endBeat.fell = -1;
+    }
+    const h = endBeat.fell >= 0 && now - endBeat.t0 < END_BEAT_MS ? endBeat.fell : winner;
+    const cut = h !== endBeat.key;
+    endBeat.key = h;
+    if (h >= 0) houseShot(R, h, now, dt, h === endBeat.fell ? 1.1 : push, cut);
+    else orbit(R, now, dt);
   }
 
   function lobbyCam(R, t, dt, mine) {
@@ -1562,14 +1596,13 @@ async function boot() {
         firstPerson(R, me, now, dt, auto);
         firstP = true;
       }
-    } else if (isDaily) {
-      if (daily.winner >= 0) houseShot(R, daily.winner, now, dt, 0.5);
-      else orbit(R, now, dt);
-    } else if (phase === 'roundEnd' || phase === 'results') {
+    } else if (isDaily) endShot(R, daily.winner, now, dt, 0.5);
+    else if (phase === 'roundEnd' || phase === 'results') {
       const ranking = match.last?.ranking ?? sync?.ranking() ?? [];
       const winId = phase === 'results' ? match.results?.[0]?.id : ranking[0]?.length === 1 ? ranking[0][0] : null;
       const h = winId ? sync.seatOf(winId) : -1;
-      if (h >= 0) houseShot(R, h, now, dt, phase === 'results' ? 0.8 : 0.3);
+      if (phase === 'roundEnd') endShot(R, h, now, dt, 0.3);
+      else if (h >= 0) houseShot(R, h, now, dt, 0.8);
       else orbit(R, now, dt);
     } else orbit(R, now, dt, true);
     shake(now);
@@ -1851,7 +1884,9 @@ async function boot() {
     if (phase === 'roundEnd' || phase === 'results') {
       ui.show('none');
       ui.watch(null);
-      if (phase === 'roundEnd') {
+      if (phase === 'roundEnd' && endHolding()) ui.banner('', null);
+      else if (phase === 'roundEnd') {
+        feel.quiet();
         const ranking = match.last?.ranking ?? sync.ranking();
         const top = ranking[0] ?? [];
         let t;
@@ -1893,8 +1928,9 @@ async function boot() {
       ui.attackerOff();
       feel.gazette(null);
       feel.chip(null);
-      if (g.shown) ui.banner('', null);
+      if (g.shown || endHolding()) ui.banner('', null);
       else {
+        feel.quiet();
         const w = g.winner >= 0 ? R.seats[g.winner].name : '';
         const t = g.won ? 'Your house stands' : w ? `${w}${w.endsWith('s') ? "'" : "'s"} house stands` : 'A tie';
         ui.banner(`dre${t}`, [{ t, size: 'mid', drop: true }]);

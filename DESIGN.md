@@ -10,7 +10,7 @@ Six glass houses around a cul-de-sac. Everyone throws stones. Last house with gl
 houses, each with its pane count on the wall as a big house number. Panes shatter, the numbers tick down, a house goes dark.
 Last house with glass wins.
 
-**In two words, once, as round 1 starts:** "Break their glass." The first time your own glass breaks: "Keep yours."
+**In two words, as round 1 (or a Daily) starts, for your first three rounds:** "Break their glass." The first time your own glass breaks: "Keep yours."
 
 ## The world in one paragraph
 
@@ -484,7 +484,8 @@ offset shadow as if mounted on a wall in a low sun. No dark boxes behind HUD ite
    - On phones everything moves around `ow.ui.reserved` (the platform's menu, stick and buttons).
 5. **Out.** Your house goes dark, "Your house is out", then you're a ghost over the green; "Pebbles crack glass" once. Your
    plate becomes a ghost outline with pebbles.
-6. **Round end** (6 s). A third-person shot pushing in on the last house standing, shards settling everywhere else. A plate:
+6. **Round end** (6 s). When the round ended on a knockout, a cut to the house that just fell (its last pane going, the KO
+   stamp) for a beat, then a cut to the last house standing, the camera pushing in, shards settling everywhere else. A plate:
    "Your house stands", "Walt's house stands" or "A tie".
 7. **Results** (20 s). The winner's house; "You win" or "Rosa wins"; the standings board (place, symbol, name, panes broken,
    points). Alone: the stars you won are kept, and the next street is picked for you in the lobby. After every round, on the
@@ -634,7 +635,7 @@ Every picture is drawn by the game's own renderer from a real round frozen at it
 - **Trailer** (`store/trailer.mp4`): see the end of this section once cut. Captured with `vcap` from a local build served
   on its own. The capture hooks are local only: `?autoplay=1` (this page plays itself with the bot brain), `?daily=auto` (the
   Daily Street plays itself), `?hush=1` (no sound until `__glass.hush(false)`) and `window.__glass` (the camera: first
-  person, `chase`, `orbit`, `weak` or `stone`; `playDaily()`, `dailySkip(ms)`; the round clock; standing houses; breaks
+  person, `chase`, `orbit`, `weak` or `stone`, which waits beside the glass a stone is about to hit; `playDaily()`, `dailySkip(ms)`; the round clock; standing houses; breaks
   seen; draw calls). The loop reads `performance.now()`, so a capture's virtual time drives everything.
 
 ## Originality check
