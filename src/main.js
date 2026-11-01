@@ -1246,16 +1246,29 @@ async function boot() {
     camera.lookAt(camLook);
   }
   function orbit(R, t, dt, high = false) {
-    // A slow crane round the green, inside the ring of lawns, looking across at the far houses.
     const f = R.field;
-    const a = t * 0.00005 + 0.6;
-    const r = f.R * (high ? 0.62 : 0.5);
-    tv.set(Math.cos(a) * r, (high ? 13 : 6.5) + Math.sin(t * 0.00013) * 1.2, Math.sin(a) * r);
-    tl.set(-Math.cos(a - 0.35) * f.R * 0.75, 3.2, -Math.sin(a - 0.35) * f.R * 0.75);
+    if (high) {
+      // A slow crane high over the green, looking across at the far houses.
+      const a = t * 0.00005 + 0.6;
+      const r = f.R * 0.62;
+      tv.set(Math.cos(a) * r, 13 + Math.sin(t * 0.00013) * 1.2, Math.sin(a) * r);
+      tl.set(-Math.cos(a - 0.35) * f.R * 0.75, 3.2, -Math.sin(a - 0.35) * f.R * 0.75);
+      lookAtSmooth(tv, tl, dt, 1.5);
+      return;
+    }
+    // Low: a slow dolly along the inside of the ring of lawns, looking ahead along the glass fronts curving away to the right,
+    // the oak out of shot to the left. On a street that's an arc it drifts to and fro along the houses.
+    const hs = f.houses;
+    const first = hs[0].angle;
+    const last = hs[hs.length - 1].angle;
+    const ring = last - first > Math.PI * 1.5;
+    const a = ring ? 0.6 - t * 0.00004 : first + 0.75 + (last - first - 0.45) * (0.5 + 0.5 * Math.sin(t * 0.00003));
+    const r = f.R * 0.6;
+    tv.set(Math.cos(a) * r, 4.4 + Math.sin(t * 0.00013) * 0.7, Math.sin(a) * r);
+    tl.set(Math.cos(a - 0.95) * f.R * 0.86, 2.2, Math.sin(a - 0.95) * f.R * 0.86);
     lookAtSmooth(tv, tl, dt, 1.5);
   }
 
-  /** The trailer's stone camera: rides behind a stone headed for glass (yours first), then watches it land. */
   // The stone camera (captures): beside the glass a stone is about to hit, so it flies in and the pane bursts toward the lens.
   // Yours first, hot ones before cold; it holds a beat on the hit, then cuts to the next.
   const impact = new THREE.Vector3();
@@ -1736,40 +1749,36 @@ async function boot() {
       lookAtSmooth(tv, tl, dt, 3.5);
       return;
     }
-    if (portrait) {
-      // A phone: the sheet covers the bottom, so stand close in front of the oak and drop the aim until the lawn piece (or the
-      // glass) sits in the middle of the strip above it.
-      const sway = Math.sin(t * 0.00022) * 0.8;
-      let u = 0;
-      let y = 2.65;
-      let d = 0.6;
-      let back = 12.5;
-      let up = 0.6;
-      if (slot === 'lawn') {
-        const f = FOCUS[locker.look.lawn] ?? [0, 0.6, 4.6, 2];
-        [u, y, d] = f;
-        back = 4.6 + f[3] * 1.5;
-        up = 1.6 + f[3] * 0.5;
-      }
-      const sx = hh.cx + hh.rx * u + hh.fx * d;
-      const sy = hh.elev + y;
-      const sz = hh.cz + hh.rz * u + hh.fz * d;
-      tv.set(sx + hh.fx * back + hh.rx * sway, sy + up, sz + hh.fz * back + hh.rz * sway);
-      const free = Math.max(0.2, Math.min(0.8, career.lockerSheet / Math.max(1, stage.height)));
-      const above = Math.atan(free * Math.tan((camera.fov * Math.PI) / 360));
-      const dep = Math.min(1.35, Math.atan2(up, back) + above);
-      tl.set(sx, tv.y - back * Math.tan(dep), sz);
-      lookAtSmooth(tv, tl, dt, 3);
-      return;
+    // The glass or the lawn piece on show, framed in the part of the screen the sheet leaves free: above it or left of it.
+    // Close in front of the oak, so the tree never fills the shot.
+    const sway = Math.sin(t * 0.00022) * 0.8;
+    let u = 0;
+    let y = 2.65;
+    let d = 0.6;
+    let back = portrait ? 12.5 : 11.5;
+    let up = portrait ? 0.6 : 0.9;
+    if (slot === 'lawn') {
+      const f = FOCUS[locker.look.lawn] ?? [0, 0.6, 4.6, 2];
+      [u, y, d] = f;
+      back = 4.6 + f[3] * 1.5;
+      up = 1.6 + f[3] * 0.5;
     }
+    const sx = hh.cx + hh.rx * u + hh.fx * d;
+    const sy = hh.elev + y;
+    const sz = hh.cz + hh.rz * u + hh.fz * d;
     // Screen-right as seen from the green looking at the house.
     const rx = hh.fz;
     const rz = -hh.fx;
-    const sway = Math.sin(t * 0.00022) * 1.5;
-    const d = 16.5;
-    const shift = 5.4;
-    tv.set(hh.cx + hh.fx * d + rx * (shift + 3 + sway), hh.elev + 4.6, hh.cz + hh.fz * d + rz * (shift + 3 + sway));
-    tl.set(hh.cx + hh.fx * 3.5 + rx * shift, hh.elev + 1.6, hh.cz + hh.fz * 3.5 + rz * shift);
+    tv.set(sx + hh.fx * back + rx * sway, sy + up, sz + hh.fz * back + rz * sway);
+    const tanV = Math.tan((camera.fov * Math.PI) / 360);
+    let dep = Math.atan2(up, back);
+    let side = 0;
+    // (Narrow screens get the sheet along the bottom, wide ones down the right.)
+    const sheetW = career.lockerSheetW;
+    if (sheetW > stage.width * 0.7) dep += Math.atan(Math.max(0.2, Math.min(0.8, career.lockerSheet / Math.max(1, stage.height))) * tanV);
+    else side = back * Math.max(0, Math.min(0.6, sheetW / Math.max(1, stage.width))) * tanV * camera.aspect;
+    dep = Math.min(1.35, dep);
+    tl.set(sx + rx * side, tv.y - back * Math.tan(dep), sz + rz * side);
     lookAtSmooth(tv, tl, dt, 3);
   }
 

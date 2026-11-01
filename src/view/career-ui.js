@@ -214,6 +214,9 @@ export function createCareerUI(root, titleEl, opts = {}) {
     get lockerSheet() {
       return sheet.offsetHeight || 0;
     },
+    get lockerSheetW() {
+      return sheet.offsetWidth || 0;
+    },
 
     /**
      * The XP a round paid: res from applyRound (xp, level, looks, jobs, streak, daily), or null to hide. Lines tick in one by one,
