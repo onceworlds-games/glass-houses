@@ -323,6 +323,214 @@ export const sound = {
     tone(on ? 2200 : 1700, 'square', 0, 0.02, 0.15, dest);
     tone(on ? 900 : 700, 'triangle', 0.02, 0.05, 0.12, dest);
   },
+  /** A stone catches fire in your hand: a whump, a roar that settles into crackle. */
+  ignite() {
+    if (!ok()) return;
+    const dest = out(0, 0);
+    const t = ctx.currentTime;
+    tone(70, 'sine', 0, 0.35, 0.7, dest, 40);
+    const n = noise(0.7);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(300, t);
+    lp.frequency.exponentialRampToValueAtTime(3200, t + 0.12);
+    lp.frequency.exponentialRampToValueAtTime(700, t + 0.6);
+    const g = ctx.createGain();
+    env(g, t, 0.02, 0.8, 0.6);
+    n.connect(lp);
+    lp.connect(g);
+    g.connect(dest);
+    for (let k = 0; k < 9; k++) tone(1800 + Math.random() * 2600, 'square', 0.1 + Math.random() * 0.5, 0.012, 0.06, dest);
+  },
+  /** A hot stone in the air: a roar that passes. */
+  roar(dist, pan) {
+    if (!ok()) return;
+    const dest = out(dist, pan);
+    const t = ctx.currentTime;
+    const n = noise(0.9);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'lowpass';
+    bp.frequency.setValueAtTime(500, t);
+    bp.frequency.exponentialRampToValueAtTime(1600, t + 0.25);
+    bp.frequency.exponentialRampToValueAtTime(400, t + 0.85);
+    const g = ctx.createGain();
+    env(g, t, 0.05, 0.7, 0.8);
+    n.connect(bp);
+    bp.connect(g);
+    g.connect(dest);
+    for (let k = 0; k < 7; k++) tone(1500 + Math.random() * 3000, 'square', Math.random() * 0.7, 0.01, 0.05, dest);
+  },
+  /** Your stone landed on glass: a bright ding in the ear, higher the hotter your streak. */
+  ding(level = 0) {
+    if (!ok()) return;
+    const dest = out(0, 0);
+    const f = 1568 * Math.pow(2, Math.min(4, level) / 12 * 2);
+    tone(f, 'sine', 0, 0.35, 0.16, dest);
+    tone(f * 1.5, 'sine', 0.035, 0.28, 0.08, dest);
+  },
+  /** A heat pip lights (n: how many now). */
+  heat(n) {
+    if (!ok()) return;
+    const dest = out(0, 0);
+    const f = [523, 659, 784, 988][Math.max(0, Math.min(3, n - 1))];
+    tone(f, 'triangle', 0, 0.16, 0.16, dest);
+    tone(f * 2, 'sine', 0.02, 0.1, 0.06, dest);
+  },
+  /** Heat lost: a hiss and a fall. */
+  cool() {
+    if (!ok()) return;
+    const dest = out(0, 0);
+    const n = noise(0.35);
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 3000;
+    const g = ctx.createGain();
+    env(g, ctx.currentTime, 0.01, 0.22, 0.32);
+    n.connect(hp);
+    hp.connect(g);
+    g.connect(dest);
+    tone(660, 'triangle', 0, 0.3, 0.1, dest, 330);
+  },
+  /** A knockout: a brass stab, a cymbal; yours gets the full fanfare. */
+  ko(mine) {
+    if (!ok()) return;
+    const dest = out(0, 0);
+    const t = ctx.currentTime;
+    const stab = (freqs, at, dur, vol) => {
+      for (const f of freqs) {
+        const o = ctx.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(f * 0.985, t + at);
+        o.frequency.exponentialRampToValueAtTime(f, t + at + 0.05);
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.Q.value = 2;
+        lp.frequency.setValueAtTime(600, t + at);
+        lp.frequency.exponentialRampToValueAtTime(3800, t + at + 0.06);
+        lp.frequency.exponentialRampToValueAtTime(900, t + at + dur);
+        const g = ctx.createGain();
+        env(g, t + at, 0.012, vol, dur);
+        o.connect(lp);
+        lp.connect(g);
+        g.connect(dest);
+        o.start(t + at);
+        o.stop(t + at + dur + 0.05);
+      }
+    };
+    if (mine) {
+      stab([392, 494, 587], 0, 0.14, 0.12);
+      stab([392, 494, 587], 0.16, 0.14, 0.12);
+      stab([523, 659, 784, 1047], 0.32, 0.9, 0.14);
+    } else stab([311, 392, 466], 0, 0.5, 0.1);
+    const n = noise(1.2);
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 5000;
+    const g = ctx.createGain();
+    env(g, t + (mine ? 0.32 : 0), 0.005, 0.25, 1.1);
+    n.connect(hp);
+    hp.connect(g);
+    g.connect(dest);
+    tone(55, 'sine', mine ? 0.32 : 0, 0.5, 0.6, dest, 35);
+  },
+  /** A trick shot: a quick rising run. */
+  trick(n = 1) {
+    if (!ok()) return;
+    const dest = out(0, 0);
+    const notes = [784, 988, 1175, 1568, 1976];
+    for (let k = 0; k < Math.min(5, 2 + n); k++) tone(notes[k], 'triangle', k * 0.05, 0.22, 0.13, dest);
+    tone(2637, 'sine', 0.05 * (2 + n), 0.5, 0.06, dest);
+  },
+  /** A golden pane: coins. */
+  coin() {
+    if (!ok()) return;
+    const dest = out(0, 0);
+    tone(1319, 'square', 0, 0.07, 0.08, dest);
+    tone(1976, 'square', 0.07, 0.4, 0.08, dest);
+    tone(2637, 'sine', 0.07, 0.6, 0.06, dest);
+  },
+  /** A pane glazed back from a knockout. */
+  salvage() {
+    if (!ok()) return;
+    const dest = out(0, 0);
+    [1047, 1319, 1568, 2093].forEach((f, k) => tone(f, 'sine', k * 0.06, 0.5, 0.1, dest));
+  },
+  /** Hail on everything: a rattle of ticks for `secs`. */
+  hail(secs = 3) {
+    if (!ok()) return;
+    const dest = out(4, 0);
+    for (let k = 0; k < secs * 70; k++) {
+      const at = Math.random() * secs;
+      const fade = at < 0.4 ? at / 0.4 : at > secs - 0.6 ? (secs - at) / 0.6 : 1;
+      tone(2500 + Math.random() * 5500, Math.random() < 0.5 ? 'square' : 'triangle', at, 0.015, 0.035 * fade, dest);
+    }
+    const n = noise(secs);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 5000;
+    bp.Q.value = 0.6;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.4);
+    g.gain.setValueAtTime(0.12, ctx.currentTime + secs - 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + secs);
+    n.connect(bp);
+    bp.connect(g);
+    g.connect(dest);
+  },
+  /** The paper lands: a slap and a rustle. */
+  paper() {
+    if (!ok()) return;
+    const dest = out(0, 0);
+    const n = noise(0.3);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1800;
+    bp.Q.value = 0.8;
+    const g = ctx.createGain();
+    env(g, ctx.currentTime, 0.003, 0.5, 0.25);
+    n.connect(bp);
+    bp.connect(g);
+    g.connect(dest);
+    tone(160, 'sine', 0, 0.12, 0.35, dest, 90);
+  },
+  /** A level gained: a fanfare. */
+  levelUp() {
+    if (!ok()) return;
+    const dest = out(0, 0);
+    [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, k) => {
+      tone(f, 'triangle', k * 0.09, k === 6 ? 1.1 : 0.25, 0.14, dest);
+      tone(f / 2, 'sine', k * 0.09, 0.3, 0.08, dest);
+    });
+  },
+  /** XP ticking up. */
+  tick(k = 0) {
+    if (!ok()) return;
+    tone(1200 + k * 40, 'square', 0, 0.02, 0.05, out(0, 0));
+  },
+  /** A dog's bark across the lawns. */
+  bark(dist, pan) {
+    if (!ok()) return;
+    const dest = out(dist, pan);
+    for (const at of [0, 0.22]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      const t = ctx.currentTime + at;
+      o.frequency.setValueAtTime(520, t);
+      o.frequency.exponentialRampToValueAtTime(260, t + 0.11);
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 900;
+      bp.Q.value = 2.5;
+      const g = ctx.createGain();
+      env(g, t, 0.006, 0.4, 0.12);
+      o.connect(bp);
+      bp.connect(g);
+      g.connect(dest);
+      o.start(t);
+      o.stop(t + 0.2);
+    }
+  },
   count(n) {
     if (!ok()) return;
     const dest = out(0, 0);

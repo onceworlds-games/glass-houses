@@ -4,6 +4,7 @@
 import './style.css';
 import '@fontsource/josefin-sans/latin-700.css';
 import '@fontsource/jost/latin-500.css';
+import '@fontsource/abril-fatface/latin-400.css';
 import * as THREE from 'three';
 import { createStage } from './view/stage.js';
 import { createWorld } from './view/world.js';
@@ -11,17 +12,24 @@ import { makeArm } from './view/people.js';
 import { loadRigs } from './view/rig.js';
 import { createInput } from './view/input.js';
 import { createUI } from './view/ui.js';
+import { createFeel } from './view/feel.js';
+import { createCareerUI } from './view/career-ui.js';
+import { gazetteOf, dateline } from './view/words.js';
+import { makeThumbs, thumb } from './view/thumbs.js';
+import { SHAPE } from './view/particles.js';
 import { startAudio, audioContext, sound, ambience, hush } from './view/audio.js';
 import { music } from './view/music.js';
 import { OWNERS } from './view/palette.js';
 import { joinRoom, createOnline } from './online.js';
 import { createSimRound, lineupSeats } from './core/sim.js';
-import { createRound, glassCount } from './core/round.js';
+import { createRound, glassCount, rankHouses } from './core/round.js';
 import { buildField, STREETS, STREET_COUNT } from './core/streets.js';
 import { tracePath, NO_WIND, handOf, velocityOf } from './core/physics.js';
-import { PERSONAS, personaByName } from './core/bots.js';
-import { readProfile, applyRound, applyMatch, unlockedCount, totalStars } from './core/progress.js';
-import { ROUND_MS, STORE_CLOSE_MS, EYE, REPAIR_MS, ROOF_Y, ROOF_T, SEATS } from './core/config.js';
+import { PERSONAS, personaByName, createBrain } from './core/bots.js';
+import { readProfile, applyRound, applyMatch, unlockedCount, totalStars, jobsToday, streakToday, wear, unseenLooks } from './core/progress.js';
+import { TRICKS, XP, PERSONA_LOOKS, lookCode, lookFromCode, levelFor } from './core/career.js';
+import { dailyOf, dayOf } from './core/twists.js';
+import { ROUND_MS, STORE_CLOSE_MS, EYE, REPAIR_MS, ROOF_Y, ROOF_T, SEATS, TICK_MS } from './core/config.js';
 
 const params = new URLSearchParams(location.search);
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -97,6 +105,26 @@ async function boot() {
     onRounds: (n) => online?.setSetting('rounds', n),
   });
   ui.show('title');
+  const feel = createFeel(uiRoot);
+  const career = createCareerUI(uiRoot, ui.titleEl, {
+    onLocker: () => booted && openLocker(),
+    onDaily: () => booted && startDaily(),
+    onWear: (slot, id) => wearLook(slot, id),
+    onTry: (slot, id) => tryLook(slot, id),
+    onLockerDone: () => closeLocker(),
+    onDailyAgain: () => startDaily(),
+    onDailyBack: () => backToTitle(),
+    thumb: (key) => thumb(key),
+    sound: { tick: (k) => sound.tick(k), levelUp: () => sound.levelUp() },
+  });
+  /** Today, as the platform's clock has it (a UTC day number). */
+  const today = () => {
+    try {
+      return dayOf(ow?.now ? ow.now() : Date.now());
+    } catch {
+      return dayOf(Date.now());
+    }
+  };
 
   await Promise.race([Promise.all([document.fonts.load('700 40px "Josefin Sans"'), document.fonts.load('500 20px Jost')]).catch(() => {}), delay(1200)]);
   // Building the street holds the page for a moment: let the join finish first on a slow machine.
@@ -114,6 +142,15 @@ async function boot() {
   W.setStreet(0);
   let profile = readProfile(null);
   let profileLoaded = false;
+  // Who this is (for the Daily Street's wall).
+  const who = { id: '', name: '' };
+  ow?.player
+    ?.get?.()
+    .then((p) => {
+      who.id = String(p?.id ?? '');
+      who.name = String(p?.name ?? '').slice(0, 24);
+    })
+    .catch(() => {});
 
   // ------------------------------------------------------------------ state
   let screen = 'title'; // title | game
@@ -144,11 +181,25 @@ async function boot() {
   let storeWasOpen = true;
   let lobby = { key: '', R: null };
   let title = { R: null, seed: 11, ms: 0, endAt: 0, shot: -1, shotUntil: 0 };
+  // The Daily Street (a round of your own against the neighbours, the same for everyone today) and the Locker.
+  let daily = null;
+  let locker = null;
+  // The feel: slow motion after a knockout, the lens kicking on a throw, the hail's shower, the dog's bark.
+  let slowUntil = 0;
+  let fovKick = 0;
+  let hailUntil = 0;
+  let barkAt = 0;
+  let goUntil = 0;
+  let paperKey = '';
+  let panesToday = 0;
+  let panesAt = -1e9;
+  let looksSig = '';
   const camPos = new THREE.Vector3(0, 14, 30);
   const camLook = new THREE.Vector3(0, 2, 0);
   const tv = new THREE.Vector3();
   const tl = new THREE.Vector3();
   const tmp = new THREE.Vector3();
+  const handTmp = new THREE.Vector3();
   const stoneLast = new THREE.Vector3();
   let camStone = -1;
   // Breaks seen, for the trailer's capture to find its cuts (local only).
@@ -177,12 +228,15 @@ async function boot() {
   const input = createInput(canvas, {
     onConfirm: () => {
       if (screen === 'title') pressPlay();
+      else if (screen === 'daily' && daily?.shown) startDaily();
       else if (ui.screen === 'lobby' && showOwnReady()) readyUp();
     },
     blocked: (x, y) => reservedList().some((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h),
   });
   input.onEsc = () => {
     if (screen === 'game' && online?.match.phase === 'round' && !ui.cardOpen) openPauseCard();
+    else if (screen === 'daily' && !ui.cardOpen) openDailyCard();
+    else if (screen === 'locker') closeLocker();
   };
 
   function resize() {
@@ -234,7 +288,7 @@ async function boot() {
     .then((raw) => {
       profile = readProfile(raw);
       profileLoaded = true;
-      ui.title({ stars: totalStars(profile), total: STREET_COUNT * 3 });
+      refreshTitle();
     })
     .catch(() => (profileLoaded = true));
   const saveProfile = () => ow?.save?.set('profile', profile).catch(() => {});
@@ -244,6 +298,36 @@ async function boot() {
   const submit = (board, score) => {
     if (score > 0) ow?.leaderboards?.submit(board, score).catch(() => {});
   };
+
+  /** The title's career: level, streak, today's jobs, the Daily Street's door, the Locker's "New". */
+  function refreshTitle() {
+    const d = today();
+    const D = dailyOf(d);
+    ui.title({ stars: totalStars(profile), total: STREET_COUNT * 3 });
+    career.title({
+      profile,
+      jobs: jobsToday(profile, d),
+      streak: streakToday(profile, d),
+      daily: { street: D.street, twist: D.twist, best: profile.daily.day === d ? profile.daily.best : 0 },
+      unseen: unseenLooks(profile),
+      panesToday,
+    });
+  }
+  /** Panes the whole game broke today (once a minute, on the title). */
+  function fetchCommunity(now) {
+    if (now - panesAt < 60000 || !ow?.data?.game) return;
+    panesAt = now;
+    ow.data.game
+      .get('panes-today')
+      .then((v) => {
+        const n = typeof v === 'number' ? v : Number(v?.value ?? v?.total ?? 0);
+        if (Number.isFinite(n) && n !== panesToday) {
+          panesToday = n;
+          refreshTitle();
+        }
+      })
+      .catch(() => {});
+  }
 
   // ------------------------------------------------------------------ the room
   function attach(room) {
@@ -261,6 +345,7 @@ async function boot() {
       room,
       autoplay,
       gentle: (s) => s <= 1 && (profile.stars[s] ?? 0) === 0,
+      look: () => lookCode(profile.look),
       onPhase: (phase, prev) => phaseChanged(phase, prev),
       onResults: (standings, mine) => matchOver(standings, mine),
       onClose: (reason) => closed(reason),
@@ -363,11 +448,42 @@ async function boot() {
         camera.add(arm.group);
         armSeat = me;
       }
+      arm.setStone(profile.look.stone);
     }
     attackerUntil = 0;
     outBannerUntil = 0;
     ghostHintAt = 0;
+    looksSig = '';
+    feel.clear();
+    fx0();
   }
+
+  /** The feel's leftovers from a round before: hail, slow motion, the lens. */
+  function fx0() {
+    W.fx.hail(false);
+    hailUntil = 0;
+    slowUntil = 0;
+    fovKick = 0;
+    goUntil = 0;
+    paperKey = '';
+  }
+
+  /** What each seat of a match's round wears: a bot its persona's, a player what their page says, you yours. */
+  function matchLooks(sync, me) {
+    return sync.seats.map((s, i) => {
+      if (i === me) return profile.look;
+      if (s.bot) return PERSONA_LOOKS[personaByName(s.name) ?? 'player'] ?? null;
+      const code = sync.looks.get(i);
+      return code ? lookFromCode(code) : null;
+    });
+  }
+  function useLooks(list) {
+    const sig = JSON.stringify(list);
+    if (sig === looksSig) return;
+    looksSig = sig;
+    W.setLooks(list);
+  }
+  const personaLooks = (personas) => personas.map((p, i) => (p === 'player' ? null : PERSONA_LOOKS[p] ?? null));
 
   function phaseChanged(phase, prev) {
     if (prev === 'round' && phase !== 'round') {
@@ -397,18 +513,70 @@ async function boot() {
     const ranking = online.match.last?.ranking ?? sync.ranking();
     const myId = online.room.me.id;
     const won = !!ranking[0] && ranking[0].length === 1 && ranking[0][0] === myId;
-    const st = R.stats[me];
-    const glassLeft = R.houses[me].outAt >= 0 ? 0 : glassCount(R.houses[me].panes);
-    const res = applyRound(profile, { street: sync.data.street, won, glassLeft, broke: st.broke, lost: st.lost, intercepts: st.intercepts, bonks: st.bonks, gnomeDouble: st.gnomeDouble });
+    const res = settle(roundInfo(R, me, won, placeIn(ranking, myId), sync.data.street, false));
+    matchStars += res.stars;
+    career.xp(res, profile.xp);
+    if (won) sound.win(false);
+  }
+
+  /** Where an id finished in a ranking (groups of tied ids, best first). */
+  function placeIn(ranking, id) {
+    let place = 1;
+    for (const group of ranking) {
+      if (group.includes(id)) return place;
+      place += group.length;
+    }
+    return 6;
+  }
+
+  /** What one seat did in a round, as the career counts it. */
+  function roundInfo(R, seat, won, place, street, isDaily) {
+    const st = R.stats[seat];
+    const h = R.houses[seat];
+    const out = h.outAt >= 0;
+    return {
+      street,
+      won,
+      place,
+      out,
+      glassLeft: out ? 0 : glassCount(h.panes),
+      broke: st.broke,
+      lost: st.lost,
+      intercepts: st.intercepts,
+      bonks: st.bonks,
+      gnomeDouble: st.gnomeDouble,
+      kos: st.kos,
+      salvaged: st.salvaged,
+      hot: st.hot,
+      hotBroke: st.hotBroke,
+      gold: st.gold,
+      glazed: st.glazed,
+      tricks: st.tricks,
+      trick: st.trick,
+      bestStreak: st.bestStreak,
+      longest: st.longest,
+      daily: isDaily,
+      day: today(),
+    };
+  }
+
+  /** A round played: the profile moves on, badges and boards, the street's count of panes. */
+  function settle(info) {
+    const res = applyRound(profile, info);
     res.profile.hints = { ...profile.hints, ...res.profile.hints };
     profile = res.profile;
-    matchStars += res.stars;
     saveProfile();
     award(res.badges);
     submit('rounds-won', profile.roundsWon);
     submit('panes', profile.panes);
     submit('stars', totalStars(profile));
-    if (won) sound.win(false);
+    submit('level', levelFor(profile.xp).level);
+    submit('knockouts', profile.kos);
+    if (info.broke > 0) {
+      ow?.data?.game?.add('panes-today', Math.max(1, Math.min(120, info.broke))).catch?.(() => {});
+      panesToday += info.broke;
+    }
+    return res;
   }
 
   function matchOver(standings, mine) {
@@ -467,6 +635,7 @@ async function boot() {
     const ctx = audioContext();
     if (document.hidden) {
       ctx?.suspend?.().catch?.(() => {});
+      if (screen === 'daily' && daily?.phase === 'round' && !daily.paused && !dailyAuto) openDailyCard();
       const room = online?.room;
       if (room && online.match.phase === 'round' && (room.kind === 'solo' || (room.kind === 'private' && room.isHost && room.online.length <= 1))) {
         try {
@@ -493,17 +662,32 @@ async function boot() {
   const paneTmp = new THREE.Vector3();
   const snowy = () => STREETS[W.index]?.light === 'snow';
 
+  /** A seat's name in the round being drawn. */
+  const seatName = (R, i) => (online?.sync?.R === R ? online.sync.seats[i]?.name : null) ?? R.seats[i]?.name ?? 'A neighbour';
+  /** Where a point in the street is on the screen (null behind the camera). */
+  function screenOf(x, y, z) {
+    project(x, y, z, proj);
+    return proj.on ? { x: proj.x, y: proj.y } : null;
+  }
+
   function onEvent(e, R, me, isTitle) {
+    const nowP = performance.now();
+    const mineOn = !isTitle && me >= 0;
     switch (e.type) {
       case 'throw': {
         if (e.seat === me) {
           const s = R.stones.find((x) => x.id === e.id);
-          sound.throw(s ? Math.min(1, Math.hypot(s.vx, s.vy, s.vz) / 30) : 0.6);
+          const pw = s ? Math.min(1, Math.hypot(s.vx, s.vy, s.vz) / 30) : 0.6;
+          sound.throw(pw);
+          if (e.hot) sound.roar(0, 0);
+          // The lens kicks out with the arm.
+          if (!isTitle && !reduced()) fovKick = Math.min(9, fovKick + 1.5 + pw * 2.5 + (e.hot ? 3 : 0));
         } else {
           const s = spatial(e.x, e.y, e.z);
           const st = R.stones.find((x) => x.id === e.id);
           const incoming = me >= 0 && st && (st.predHouse === me || st.predBody === me) && st.pred !== 'ground';
           sound.whoosh(s.d, s.pan, !!incoming);
+          if (e.hot) sound.roar(s.d, s.pan);
           if (e.kind === 'gnome') sound.wheee(s.d, s.pan);
         }
         break;
@@ -513,25 +697,42 @@ async function boot() {
         if (e.panes?.length) {
           W.glass.paneWorld(e.house, e.panes[0], paneTmp);
           const s = spatial(paneTmp.x, paneTmp.y, paneTmp.z);
-          for (const p of e.panes) W.glass.burst(e.house, p, dir, e.kind === 'brick' ? 1.25 : 1, s.d);
-          // A flash at the pane: a break reads from across the street.
+          for (const p of e.panes) W.glass.burst(e.house, p, dir, e.kind === 'brick' ? 1.25 : e.hot ? 1.2 : 1, s.d);
+          // A flash at the pane and a burst of glitter: a break reads from across the street.
           W.fx.glint(paneTmp.x, paneTmp.y, paneTmp.z, 1.6 + Math.min(2.4, s.d / 10));
+          W.fx.shatter(paneTmp.x, paneTmp.y, paneTmp.z, { far: s.d > 22, hot: !!e.hot });
           sound.shatter(s.d, s.pan, e.house === me, e.panes.length);
           if (breakLog && breakLog.length < 200) breakLog.push({ house: e.house, by: e.by, panes: e.panes.length, d: Math.round(s.d) });
           if (s.d < 9) trauma = Math.min(1, trauma + 0.12);
+          W.lawns.react(e.house, 'hit', nowP);
+          if (W.looks[e.house]?.lawn === 'dog' && nowP > barkAt) {
+            barkAt = nowP + 1600;
+            const hh = W.field.houses[e.house];
+            const sd = spatial(hh.cx + hh.fx * 4, hh.elev + 0.5, hh.cz + hh.fz * 4);
+            setTimeout(() => sound.bark(sd.d, sd.pan), 180);
+          }
+          // Yours: the reticle cracks, a ding (higher the hotter the streak) and the XP jumps off the glass.
+          if (mineOn && e.by === me && e.house !== me) {
+            feel.confirm(!!e.hot, reduced());
+            sound.ding(Math.max(0, (R.bodies[me]?.streak ?? 1) - 1));
+            const sp = screenOf(paneTmp.x, paneTmp.y, paneTmp.z);
+            if (sp) feel.plus(sp.x, sp.y, `+${(XP.pane + (e.hot ? XP.hotBreak : 0)) * e.panes.length}`, e.hot ? 'hot' : '', nowP);
+          }
         }
         if (e.cracked >= 0 && !e.panes?.length) {
           W.glass.paneWorld(e.house, e.cracked, paneTmp);
           const s = spatial(paneTmp.x, paneTmp.y, paneTmp.z);
           sound.crack(s.d, s.pan);
+          if (mineOn && e.by === me && e.house !== me) feel.confirm(false, reduced());
         }
-        if (e.house === me && me >= 0 && e.panes?.length && !isTitle) hitMe(e.by, e.panes.length);
+        if (e.house === me && me >= 0 && e.panes?.length && !isTitle) hitMe(e.by, e.panes.length, R, me);
         break;
       }
       case 'crack': {
         const s = spatial(e.x, e.y, e.z);
         sound.crack(s.d, s.pan);
         W.fx.glint(e.x, e.y, e.z, 0.8);
+        if (mineOn && e.by === me && e.house !== me) feel.confirm(false, reduced());
         break;
       }
       case 'clunk': {
@@ -549,7 +750,7 @@ async function boot() {
       case 'skip': {
         const s = spatial(e.x, e.y, e.z);
         sound.thud(s.d, s.pan, snowy());
-        W.fx.land(e.x, e.y, e.z, e.vx ?? 0, e.vz ?? 1, e.what ?? 'ground');
+        W.fx.land(e.x, e.y, e.z, e.vx ?? 0, e.vz ?? 1, e.what ?? 'ground', !!e.hot);
         break;
       }
       case 'gone':
@@ -559,23 +760,60 @@ async function boot() {
         const s = spatial(e.x, e.y, e.z);
         sound.clack(s.d, s.pan);
         W.fx.clack(e.x, e.y, e.z);
+        if (e.hot) W.fx.embers(e.x, e.y, e.z, 26);
         break;
       }
       case 'bonk': {
         const s = spatial(e.x, e.y, e.z);
         sound.bonk(s.d, s.pan, e.seat === me);
         W.fx.glint(e.x, e.y, e.z, 1.3);
-        if (e.seat === me && !isTitle) trauma = Math.min(1, trauma + 0.6);
+        if (e.seat === me && !isTitle) {
+          trauma = Math.min(1, trauma + 0.6);
+          if (e.by >= 0) feel.hurt(bearing(R, e.by), 2, reduced());
+        }
         break;
       }
       case 'poof':
         W.fx.poof(e.x, e.y, e.z, OWNERS[e.seat % OWNERS.length].color);
         break;
+      case 'heat':
+        if (mineOn && e.seat === me) {
+          if (e.lost) {
+            sound.cool();
+            feel.toast('Cooled off', 'cool', nowP);
+          } else if (!e.cooled) sound.heat(e.heat);
+        }
+        break;
+      case 'hot':
+        if (mineOn && e.seat === me) {
+          sound.ignite();
+          if (!e.salvage) feel.toast(e.gold ? 'Gold! Full hands, hot stone' : 'Hot stone!', 'gold', nowP);
+          once('hot', 'Hot stones break two', 2600);
+        }
+        break;
+      case 'trick': {
+        if (e.ids.includes('gold')) {
+          W.fx.gold(e.x, e.y, e.z);
+          if (e.seat === me) sound.coin();
+        }
+        if (isTitle) break;
+        const shown = e.ids.filter((id) => id !== 'ko');
+        if (!shown.length) break;
+        if (e.seat === me) {
+          feel.trick(shown.map((id) => ({ name: TRICKS[id]?.name ?? id, xp: TRICKS[id]?.xp ?? 0, big: id === 'long' || id === 'buzzer' || id === 'firefighter' })));
+          sound.trick(shown.length);
+        } else feel.feed({ name: seatName(R, e.seat), seat: e.seat, text: shown.map((id) => TRICKS[id]?.name ?? id).join(' + ') }, nowP);
+        break;
+      }
       case 'out': {
         const h = W.field.houses[e.house];
         const s = spatial(h.cx, h.elev + 3, h.cz);
         sound.fall(s.d, s.pan, e.house === me);
         W.fx.dust(h.cx + h.fx * 1.5, h.elev + 0.5, h.cz + h.fz * 1.5, 12, '#E8DCC8');
+        W.lawns.react(e.house, 'out', nowP);
+        const by = e.by;
+        const ko = by >= 0 && by !== e.house;
+        if (ko) W.fx.knockout(h.cx + h.fx * 1.2, h.elev + 2.6, h.cz + h.fz * 1.2, OWNERS[by % OWNERS.length].color);
         if (isTitle) {
           title.shot = e.house;
           title.shotUntil = performance.now() + 3600;
@@ -583,7 +821,56 @@ async function boot() {
           outBannerUntil = performance.now() + 2600;
           ghostHintAt = performance.now() + 2800;
           trauma = Math.min(1, trauma + 0.5);
+        } else if (ko) {
+          const mine = by === me;
+          feel.knockout(mine ? `${seatName(R, e.house)} is out` : `${seatName(R, by)} took out ${seatName(R, e.house)}`, mine, nowP);
+          sound.ko(mine);
+          if (mine && !reduced()) {
+            // The moment: everything in the air hangs, the lens punches in.
+            slowUntil = nowP + 520;
+            fovKick = -7;
+            trauma = Math.min(1, trauma + 0.35);
+          }
         }
+        break;
+      }
+      case 'salvage': {
+        if (e.pane >= 0) {
+          W.glass.paneWorld(e.house, e.pane, paneTmp);
+          W.fx.salvage(paneTmp.x, paneTmp.y, paneTmp.z);
+        }
+        if (mineOn && e.house === me) {
+          sound.salvage();
+          feel.toast(e.pane >= 0 ? 'Salvage: a pane back' : 'Salvage: a hot stone', 'good', nowP);
+          once('salvage', 'Knockouts win a pane back', 2400);
+        }
+        break;
+      }
+      case 'hail': {
+        const secs = Math.max(0.5, (e.at - R.now) / 1000);
+        if (!isTitle) {
+          feel.warn('Hail!', 2200, nowP);
+          sound.hail(Math.min(4.5, secs + 1.8));
+        }
+        W.fx.hail(true);
+        hailUntil = nowP + secs * 1000 + 1800;
+        break;
+      }
+      case 'hailHit': {
+        const list = e.panes ?? [];
+        for (const p of list) {
+          W.glass.paneWorld(e.house, p, paneTmp);
+          const s = spatial(paneTmp.x, paneTmp.y, paneTmp.z);
+          W.glass.burst(e.house, p, { x: 0, y: -6, z: 0 }, 0.8, s.d);
+        }
+        const first = list.length ? list[0] : e.cracked?.[0];
+        if (first !== undefined) {
+          W.glass.paneWorld(e.house, first, paneTmp);
+          const s = spatial(paneTmp.x, paneTmp.y, paneTmp.z);
+          if (list.length) sound.shatter(s.d, s.pan, e.house === me, list.length);
+          else sound.crack(s.d, s.pan);
+        }
+        if (e.house === me && list.length && !isTitle) hitMe(-1, list.length, R, me);
         break;
       }
       case 'glaze': {
@@ -616,6 +903,14 @@ async function boot() {
     }
   }
 
+  /** Where a seat is from where you look: 0 ahead (the top of the screen), π/2 to the right. */
+  function bearing(R, seat) {
+    const a = R.bodies[seat];
+    if (!a) return 0;
+    tmp.set(a.ghost ? a.gx : a.x, a.ghost ? a.gy : a.y + 1.4, a.ghost ? a.gz : a.z).applyMatrix4(camera.matrixWorldInverse);
+    return Math.atan2(tmp.x, -tmp.z);
+  }
+
   /** A hint the player sees once, ever. */
   function once(id, text, ms) {
     if (profile.hints[id]) return false;
@@ -624,10 +919,12 @@ async function boot() {
     return true;
   }
 
-  function hitMe(by, n) {
+  function hitMe(by, n, R, me) {
     trauma = Math.min(1, trauma + 0.25 + 0.1 * n);
     ui.flash(reduced());
-    if (by >= 0 && by !== online?.sync.mySeat) {
+    // Cracks at the edge of the screen on the side it came from (straight down for hail).
+    feel.hurt(by >= 0 && by !== me ? bearing(R, by) : 0, n, reduced());
+    if (by >= 0 && by !== me) {
       attackerSeat = by;
       attackerUntil = performance.now() + 1500;
     }
@@ -653,7 +950,10 @@ async function boot() {
     show(`title:${title.seed}`, () => {
       W.setStreet(0);
       W.sweep();
-      W.cast(R.seats.map((s) => s.persona));
+      const personas = R.seats.map((s) => s.persona);
+      W.cast(personas);
+      useLooks(personaLooks(personas));
+      fx0();
     });
     title.ms += dt * 1000;
     R.advanceTo(title.ms);
@@ -679,6 +979,8 @@ async function boot() {
       const personas = [];
       for (let i = 0; i < SEATS; i++) personas.push(i < players.length ? 'player' : STREETS[street].lineup[i - players.length] ?? 'walt');
       W.cast(personas);
+      useLooks(personas.map((p, i) => (i < players.length ? (players[i].me ? profile.look : null) : PERSONA_LOOKS[p] ?? null)));
+      fx0();
     });
     return lobby.R;
   }
@@ -686,6 +988,260 @@ async function boot() {
   function lobbyMe() {
     const i = lobbyPlayers().findIndex((p) => p.me);
     return i >= 0 ? i : 0;
+  }
+
+  // ------------------------------------------------------------------ the Daily Street: today's street, seed and twist, for everyone
+  const DAILY_INTRO_MS = 4200;
+  const DAILY_RESULTS_MS = 2600;
+
+  function startDaily() {
+    if (screen !== 'title' && screen !== 'daily') return;
+    startAudio();
+    music.start();
+    sound.paper();
+    const d = today();
+    const D = dailyOf(d);
+    const seats = lineupSeats(D.street).map((s, i) => (i === 0 ? { ...s, id: 'me', name: who.name || 'You', bot: false, persona: 'player' } : s));
+    const R = createRound({
+      field: buildField(D.street),
+      seed: D.seed,
+      round: 3,
+      twist: D.twist,
+      seats,
+      host: true,
+      // (The trailer's capture lets the street play your seat too: ?daily=auto, local only.)
+      brains: seats.map((s, i) => (i === 0 && !dailyAuto ? null : createBrain(i === 0 ? 'player' : s.persona, i === 0 ? 0.75 : s.skill, `daily:${D.seed}:${i}`))),
+    });
+    daily = { d, D, R, ms: 0, phase: 'intro', t0: last, endAt: 0, shown: false, res: null, paused: false, wall: null, plays: 0 };
+    screen = 'daily';
+    hideStrip(true);
+    career.xp(null);
+    career.daily(null);
+    ui.card(null);
+    showing = '';
+    show(`daily:${d}:${performance.now()}`, () => {
+      W.setStreet(D.street);
+      W.sweep();
+      const personas = seats.map((s) => s.persona);
+      W.cast(personas);
+      looksSig = '';
+      useLooks(personas.map((p, i) => (i === 0 ? profile.look : PERSONA_LOOKS[p] ?? null)));
+      if (armSeat !== 0) {
+        if (arm) {
+          camera.remove(arm.group);
+          arm.dispose();
+        }
+        arm = makeArm(0);
+        camera.add(arm.group);
+        armSeat = 0;
+      }
+      arm.setStone(profile.look.stone);
+    });
+    input.face(R.bodies[0].yaw, 0.12);
+    feel.clear();
+    fx0();
+    attackerUntil = 0;
+    outBannerUntil = 0;
+    ghostHintAt = 0;
+  }
+
+  const dailyAuto = (LOCAL || ow?.mode === 'standalone') && params.get('daily') === 'auto';
+
+  function stepDaily(dt, now) {
+    const g = daily;
+    if (g.phase === 'intro') {
+      if (now - g.t0 > DAILY_INTRO_MS) {
+        g.phase = 'round';
+        goUntil = now + 900;
+        sound.count(0);
+      }
+    } else if (g.phase === 'round') {
+      if (!g.paused && !menuOpen) {
+        g.ms += dt * 1000;
+        g.R.advanceTo(g.ms);
+      }
+      if (g.R.alive() <= 1 || g.R.now >= ROUND_MS) endDaily(now);
+    } else if (g.phase === 'end' && !g.shown && now - g.endAt > DAILY_RESULTS_MS) {
+      g.shown = true;
+      showDailyResults();
+    }
+    return g.R;
+  }
+
+  /** Your house is out and only the neighbours are left: the rest of the round runs at once. */
+  function finishDaily() {
+    const g = daily;
+    if (!g || g.phase !== 'round') return;
+    const R = g.R;
+    while (R.alive() > 1 && R.now < ROUND_MS) {
+      R.stepTick();
+      R.events.length = 0;
+    }
+    g.ms = R.now;
+    W.sweep();
+    endDaily(performance.now());
+  }
+
+  function endDaily(now) {
+    const g = daily;
+    if (g.phase !== 'round') return;
+    g.phase = 'end';
+    g.endAt = now;
+    const R = g.R;
+    R.over = true;
+    const ids = R.seats.map((s) => s.id);
+    const ranking = rankHouses(R.houses, ids);
+    const won = ranking[0]?.length === 1 && ranking[0][0] === 'me';
+    g.won = won;
+    g.winner = ranking[0]?.length === 1 ? ids.indexOf(ranking[0][0]) : -1;
+    g.res = settle(roundInfo(R, 0, won, placeIn(ranking, 'me'), g.D.street, true));
+    if (won) sound.win(false);
+    else sound.lose();
+    // The neighbourhood's wall: your best of the day goes up; everyone's plays are counted.
+    const day = g.d;
+    const sc = g.res.daily?.score ?? 0;
+    const gd = ow?.data?.game;
+    if (gd) {
+      const after = () =>
+        gd
+          .get('daily-wall')
+          .then((list) => {
+            if (daily !== g) return;
+            g.wall = readWall(list, day);
+            if (g.shown) showDailyResults();
+          })
+          .catch(() => {});
+      gd.add('daily-plays', 1)
+        .then((n) => {
+          if (typeof n === 'number') g.plays = n;
+        })
+        .catch(() => {});
+      if (g.res.daily?.personal && sc > 0) gd.push('daily-wall', { d: day, s: sc, st: g.D.street }).then(after, after);
+      else after();
+    } else g.wall = [];
+  }
+
+  /** The wall's items for a day: each player's best, best first. */
+  function readWall(list, day) {
+    if (!Array.isArray(list)) return [];
+    const best = new Map();
+    for (const it of list) {
+      const v = it?.value;
+      if (!v || v.d !== day || !Number.isFinite(v.s)) continue;
+      const id = String(it.by?.id ?? '');
+      const prev = best.get(id);
+      if (!prev || v.s > prev.score) best.set(id, { name: String(it.by?.name ?? 'Neighbour').slice(0, 24), score: Math.max(0, Math.min(99999, Math.round(v.s))), me: !!who.id && id === who.id });
+    }
+    return [...best.values()].sort((a, b) => b.score - a.score);
+  }
+
+  function showDailyResults() {
+    const g = daily;
+    if (!g?.res) return;
+    career.xp(g.res, profile.xp);
+    career.daily({
+      score: g.res.daily?.score ?? 0,
+      best: g.res.daily?.best ?? 0,
+      personal: !!g.res.daily?.personal,
+      street: g.D.street,
+      twist: g.D.twist,
+      place: 0,
+      wall: g.wall,
+      plays: g.plays,
+    });
+  }
+
+  function backToTitle() {
+    sound.click();
+    screen = 'title';
+    daily = null;
+    locker = null;
+    career.xp(null);
+    career.daily(null);
+    career.locker(null);
+    ui.card(null);
+    feel.clear();
+    fx0();
+    showing = '';
+    hideStrip(true);
+    music.set('menu');
+    refreshTitle();
+  }
+
+  // ------------------------------------------------------------------ the Locker: try looks on on your own house
+  function openLocker() {
+    if (screen !== 'title') return;
+    startAudio();
+    sound.click();
+    const seats = lineupSeats(0);
+    locker = { R: createRound({ field: buildField(0), seed: 5, round: 1, seats, host: true }), ms: 0, next: performance.now() + 600, look: { ...profile.look } };
+    screen = 'locker';
+    showing = '';
+    career.locker(profile, unseenLooks(profile));
+    makeThumbs().then(() => career.redraw());
+  }
+
+  function closeLocker() {
+    // Everything new has been seen now.
+    profile.seen = [...new Set([...profile.seen, ...unseenLooks(profile)])];
+    saveProfile();
+    backToTitle();
+  }
+
+  function tryLook(slot, id) {
+    if (!locker) return;
+    locker.look = { ...profile.look, [slot]: id };
+    locker.next = Math.min(locker.next, performance.now() + 250);
+    sound.click();
+  }
+
+  function wearLook(slot, id) {
+    profile = wear(profile, slot, id);
+    saveProfile();
+    if (locker) locker.look = { ...profile.look };
+    career.locker(profile, unseenLooks(profile));
+    sound.click();
+  }
+
+  function stepLocker(dt, now) {
+    const L = locker;
+    const R = L.R;
+    show('locker', () => {
+      W.setStreet(0);
+      W.sweep();
+      W.cast(R.seats.map((s) => s.persona));
+      looksSig = '';
+      fx0();
+      lockerCam(R, now, 10);
+    });
+    useLooks(R.seats.map((s, i) => (i === 0 ? L.look : PERSONA_LOOKS[s.persona] ?? null)));
+    // A long stay: the street starts over (the round's clock has an end).
+    if (L.ms > ROUND_MS - 20000) {
+      L.R = createRound({ field: R.field, seed: 5, round: 1, seats: R.seats, host: true });
+      L.ms = 0;
+      return stepLocker(dt, now);
+    }
+    L.ms += dt * 1000;
+    // Your neighbour-self winds up and throws one into the street now and then: the stone and its trail, as the street sees them.
+    const b = R.bodies[0];
+    const inp = b.input;
+    if (now > L.next) {
+      L.next = now + 2300;
+      const hh = R.field.houses[0];
+      // Off to one side of the green's tree.
+      inp.yaw = Math.atan2(hh.fx, hh.fz) + Math.PI + 0.4 + (Math.random() - 0.5) * 0.2;
+      inp.pitch = 0.42 + Math.random() * 0.12;
+      inp.throwHeld = true;
+      inp.releasePower = 0.55 + Math.random() * 0.15;
+      b.ammo = 5;
+      b.hot = Math.random() < 0.3;
+      L.thrown = b.lastThrowAt;
+    }
+    R.advanceTo(L.ms);
+    if (inp.throwHeld && b.lastThrowAt !== L.thrown) inp.throwHeld = false;
+    for (const e of R.events) if (e.type === 'land' || e.type === 'skip') W.fx.land(e.x, e.y, e.z, e.vx ?? 0, e.vz ?? 1, e.what ?? 'ground', !!e.hot);
+    R.events.length = 0;
+    return R;
   }
 
   // ------------------------------------------------------------------ the camera
@@ -929,8 +1485,15 @@ async function boot() {
     const match = online?.match ?? null;
     // Readied from the platform's own strip (or a match this page is part of began): straight in from the title.
     if (screen === 'title' && match && match.phase !== 'lobby' && match.phase !== 'results' && (match.me || online.room.me?.ready)) pressPlay();
-    const phase = screen === 'title' ? 'title' : match?.phase ?? 'lobby';
-    const flow = phase === 'title' ? 'title' : phase === 'lobby' || phase === 'countdown' || phase === 'roundEnd' || phase === 'results' ? phase : 'playing';
+    const isTitle = screen === 'title';
+    const isDaily = screen === 'daily' && !!daily;
+    const isLocker = screen === 'locker' && !!locker;
+    let phase;
+    if (isTitle) phase = 'title';
+    else if (isLocker) phase = 'locker';
+    else if (isDaily) phase = daily.phase === 'end' ? 'roundEnd' : daily.phase;
+    else phase = match?.phase ?? 'lobby';
+    const flow = isDaily ? `daily-${daily.phase}` : phase === 'title' || phase === 'locker' ? phase : phase === 'lobby' || phase === 'countdown' || phase === 'roundEnd' || phase === 'results' ? phase : 'playing';
     if (flow !== lastFlow) {
       lastFlow = flow;
       document.body.dataset.flow = flow;
@@ -939,19 +1502,25 @@ async function boot() {
     const live = screen === 'game' && sync?.R && (phase === 'intro' || phase === 'round' || phase === 'roundEnd' || phase === 'results');
     let R;
     let me = -1;
-    const isTitle = screen === 'title';
     if (isTitle) R = stepTitle(dt);
-    else if (live) {
+    else if (isLocker) R = stepLocker(dt, now);
+    else if (isDaily) {
+      R = stepDaily(dt, now);
+      me = 0;
+    } else if (live) {
       R = sync.R;
       me = sync.mySeat;
       show(`round:${sync.key}`, () => setupRound(R, sync.data));
+      if (me >= 0) useLooks(matchLooks(sync, me));
     } else R = lobbyRound();
 
     // This player's hands on their body, then the round runs to the match clock.
-    const playing = !isTitle && phase === 'round' && me >= 0 && R === sync?.R;
-    const active = playing && !autoplay && !ui.cardOpen && !menuOpen && !match?.paused;
+    const playing = phase === 'round' && me >= 0 && (isDaily || (!isTitle && R === sync?.R));
+    const paused = isDaily ? daily.paused : !!match?.paused;
+    const auto = autoplay || (isDaily && dailyAuto);
+    const active = playing && !auto && !ui.cardOpen && !menuOpen && !paused;
     input.setActive(active);
-    if (playing && !autoplay) input.apply(R.bodies[me].input, null);
+    if (playing && !auto) input.apply(R.bodies[me].input, null);
     setControls(active);
     try {
       online?.frame(dt, now);
@@ -968,12 +1537,14 @@ async function boot() {
     if (isTitle) {
       if (title.shot >= 0 && now < title.shotUntil) houseShot(R, title.shot, now, dt, 1 - (title.shotUntil - now) / 3600);
       else orbit(R, now, dt);
-    } else if (phase === 'lobby') lobbyCam(R, now, dt, lobbyMe());
-    else if (phase === 'countdown') {
+    } else if (isLocker) lockerCam(R, now, dt);
+    else if (phase === 'lobby') lobbyCam(R, now, dt, lobbyMe());
+    else if (phase === 'countdown' || (isDaily && phase === 'intro')) {
       // Down from above onto your lawn.
       const f = R.field;
-      const hh = f.houses[lobbyMe()];
-      const k = 1 - Math.max(0, Math.min(1, (match.countdown ?? 0) / 3));
+      const hh = f.houses[isDaily ? 0 : lobbyMe()];
+      const left = isDaily ? Math.max(0, (DAILY_INTRO_MS - (now - daily.t0)) / 1000) * (3 / (DAILY_INTRO_MS / 1000)) : match.countdown ?? 0;
+      const k = 1 - Math.max(0, Math.min(1, left / 3));
       const e = k * k * (3 - 2 * k);
       tv.set(Math.cos(hh.angle) * f.R * (1.0 - 0.25 * e), f.R * 1.4 * (1 - e) + (hh.elev + EYE) * e, Math.sin(hh.angle) * f.R * (1.0 - 0.25 * e));
       tl.set(-Math.cos(hh.angle) * f.R * 0.3 * (1 + e), 2 * e, -Math.sin(hh.angle) * f.R * 0.3 * (1 + e));
@@ -990,12 +1561,14 @@ async function boot() {
           tv.set(hh.cx + hh.fx * 7.5 + hh.rx * 5, hh.elev + 1.7, hh.cz + hh.fz * 7.5 + hh.rz * 5);
           tl.set(hh.cx - hh.rx * 1.5, hh.elev + 2.6, hh.cz - hh.rz * 1.5);
           lookAtSmooth(tv, tl, dt, 3);
-        }
-        else orbit(R, now, dt, true);
+        } else orbit(R, now, dt, true);
       } else {
-        firstPerson(R, me, now, dt, autoplay);
+        firstPerson(R, me, now, dt, auto);
         firstP = true;
       }
+    } else if (isDaily) {
+      if (daily.winner >= 0) houseShot(R, daily.winner, now, dt, 0.5);
+      else orbit(R, now, dt);
     } else if (phase === 'roundEnd' || phase === 'results') {
       const ranking = match.last?.ranking ?? sync?.ranking() ?? [];
       const winId = phase === 'results' ? match.results?.[0]?.id : ranking[0]?.length === 1 ? ranking[0][0] : null;
@@ -1005,17 +1578,27 @@ async function boot() {
     } else orbit(R, now, dt, true);
     shake(now);
     trauma = Math.max(0, trauma - dt * 1.3);
+    // The lens: kicked out by a throw, punched in by a knockout, settling back.
+    fovKick *= Math.exp(-dt * 7);
+    if (Math.abs(fovKick) < 0.02) fovKick = 0;
+    stage.setFov(66 + (firstP ? fovKick : 0));
     camera.updateMatrixWorld();
     camRight.set(Math.cos(camera.rotation.y), 0, -Math.sin(camera.rotation.y));
 
     // The street.
-    for (const e of R.events) onEvent(e, R, me, isTitle);
+    for (const e of R.events) onEvent(e, R, me, isTitle || isLocker);
     R.events.length = 0;
+    if (hailUntil && now > hailUntil) {
+      hailUntil = 0;
+      W.fx.hail(false);
+    }
     W.me = me;
     W.hideMe = firstP;
     W.ghostsOff = !!R.over || phase === 'roundEnd' || phase === 'results';
     const wind = R.windNow();
-    W.draw(R, dt, now, wind);
+    // A knockout of yours: what's in the air hangs for a moment.
+    const viewDt = now < slowUntil ? dt * 0.3 : dt;
+    W.draw(R, viewDt, now, wind);
     if (!isTitle && phase === 'lobby') {
       const players = lobbyPlayers();
       let sig = '';
@@ -1032,14 +1615,25 @@ async function boot() {
     }
     // The hardware store shutting: its bell, once, as it happens.
     const storeOpen = R.storeOpen();
-    if (live && phase === 'round' && storeWasOpen && !storeOpen && R.now < STORE_CLOSE_MS + 1000) sound.bell();
+    if ((live || isDaily) && phase === 'round' && storeWasOpen && !storeOpen && R.now < R.storeClose + 1000) sound.bell();
     storeWasOpen = storeOpen;
     if (arm) {
       arm.group.visible = firstP && !!mine && !(mine.ghost && mine.pebbles <= 0);
-      if (arm.group.visible) arm.update(mine, R.now, dt, mine.ghost);
+      if (arm.group.visible) {
+        arm.update(mine, R.now, dt, mine.ghost);
+        // A hot stone burns in your hand.
+        if (mine.hot && !mine.held && !mine.ghost && arm.stoneAt(handTmp)) {
+          handTmp.y += 0.03;
+          W.fx.parts.glowAt(handTmp.x, handTmp.y, handTmp.z, '#FF8A2A', 0.32, 0.55, SHAPE.puff, true);
+          if (Math.random() < dt * 45) {
+            W.fx.parts.emit({ x: handTmp.x + (Math.random() - 0.5) * 0.05, y: handTmp.y, z: handTmp.z + (Math.random() - 0.5) * 0.05, vx: (Math.random() - 0.5) * 0.15, vy: 0.25, vz: (Math.random() - 0.5) * 0.15, color: Math.random() < 0.5 ? '#FFB040' : '#FF6A1A', bright: 1.5, size: 0.035 + Math.random() * 0.025, grow: 0.6, life: 0.3 + Math.random() * 0.15, shape: SHAPE.flame, add: true, rise: 1.2, drag: 2 });
+          }
+        }
+      }
     }
     if (mine && (firstP || cam) && playing) drawArc(R, me);
     else W.fx.hideArc();
+    feel.hot(!!mine && playing && mine.hot && !mine.ghost && !reduced());
 
     // Sound that follows state.
     if (mine && playing) {
@@ -1049,27 +1643,92 @@ async function boot() {
         sound.squeak(0);
       }
     } else sound.windup(0);
-    ambience(wind.s, dt, { night: STREETS[W.index]?.light === 'night', snow: snowy(), quiet: isTitle });
-    if (!isTitle) {
+    ambience(wind.s, dt, { night: STREETS[W.index]?.light === 'night', snow: snowy(), quiet: isTitle || isLocker });
+    if (!isTitle && !isLocker) {
       let mode = 'menu';
       if (phase === 'round' || phase === 'intro') {
         const alive = R.alive();
-        mode = alive <= 2 ? 'frantic' : alive <= 3 ? 'tense' : R.now >= STORE_CLOSE_MS ? 'late' : 'play';
+        mode = alive <= 2 ? 'frantic' : alive <= 3 ? 'tense' : R.now >= R.storeClose ? 'late' : 'play';
       }
       music.set(mode);
     }
 
     hud(R, me, phase, match, now, firstP);
     stage.render(now / 1000);
+    drawnR = R;
+  }
+  let drawnR = null;
+
+  /**
+   * The Locker's camera. Stones and trails: over your shoulder as you wind up, then riding along behind the stone. Glass and lawns:
+   * your house and its lawn three-quarters on from the green. Either way framed beside (or above) the sheet.
+   */
+  function lockerCam(R, t, dt) {
+    const hh = R.field.houses[0];
+    const portrait = stage.height > stage.width;
+    const slot = career.lockerSlot;
+    if (slot === 'stone' || slot === 'trail') {
+      const b = R.bodies[0];
+      // Along the throw (toward the middle of the street) and its right.
+      const ax = hh.fx;
+      const az = hh.fz;
+      const rx = -az;
+      const rz = ax;
+      const lean = portrait ? 0 : 1;
+      let s = null;
+      for (const o of R.stones) if (o.alive && o.seat === 0) s = o;
+      if (s) {
+        const h = Math.hypot(s.vx, s.vz) || 1;
+        const vx = s.vx / h;
+        const vz = s.vz / h;
+        tv.set(s.x - vx * 2.4 - vz * 0.9, s.y + 0.55, s.z - vz * 2.4 + vx * 0.9);
+        tl.set(s.x + vx * 1.6 - vz * 1.3 * lean, s.y + s.vy * 0.05 - (portrait ? 0.9 : 0), s.z + vz * 1.6 + vx * 1.3 * lean);
+        stoneLast.set(s.x, s.y, s.z);
+        lookAtSmooth(tv, tl, dt, 8);
+        locker.held = t + 500;
+        return;
+      }
+      if (t < (locker.held ?? 0)) {
+        // It landed: a beat looking at where.
+        tv.copy(camPos);
+        lookAtSmooth(tv, stoneLast, dt, 4);
+        return;
+      }
+      tv.set(b.x - ax * 2.8 + rx * 1.2, b.y + 2.1, b.z - az * 2.8 + rz * 1.2);
+      tl.set(b.x + ax * 8 + rx * 3.2 * lean, b.y + (portrait ? -0.6 : 1.3), b.z + az * 8 + rz * 3.2 * lean);
+      lookAtSmooth(tv, tl, dt, 3.5);
+      return;
+    }
+    // Screen-right as seen from the green looking at the house.
+    const rx = hh.fz;
+    const rz = -hh.fx;
+    const sway = Math.sin(t * 0.00022) * 1.5;
+    const d = portrait ? 24 : 16.5;
+    const shift = portrait ? 0 : 5.4;
+    tv.set(hh.cx + hh.fx * d + rx * (shift + 3 + sway), hh.elev + (portrait ? 7.5 : 4.6), hh.cz + hh.fz * d + rz * (shift + 3 + sway));
+    tl.set(hh.cx + hh.fx * 3.5 + rx * shift, hh.elev + (portrait ? -3.2 : 1.6), hh.cz + hh.fz * 3.5 + rz * shift);
+    lookAtSmooth(tv, tl, dt, 3);
   }
 
   // ------------------------------------------------------------------ the HUD for this moment
   function hud(R, me, phase, match, now, firstP) {
     ui.tick(now);
+    feel.tick(now);
     if (screen === 'title') {
       ui.show('title');
       ui.banner('', null);
       ui.standings(null);
+      fetchCommunity(now);
+      return;
+    }
+    if (screen === 'locker') {
+      ui.show('none');
+      ui.banner('', null);
+      ui.standings(null);
+      return;
+    }
+    if (screen === 'daily' && daily) {
+      hudDaily(R, phase, now, firstP);
       return;
     }
     if (!online) {
@@ -1080,6 +1739,10 @@ async function boot() {
     const room = online.room;
     // Standings: after a round (the match so far), the results, and the lobby after them.
     const results = match.results;
+    // The XP a round paid stays up through the round's end and the results.
+    if (phase !== 'roundEnd' && phase !== 'results') career.xp(null);
+    if (phase !== 'intro') feel.gazette(null);
+    if (phase !== 'round') feel.chip(null);
     if (phase === 'roundEnd' || phase === 'results' || (phase === 'lobby' && results)) {
       const list = phase === 'roundEnd' ? match.standings : results ?? match.standings;
       const tl = online.tally();
@@ -1179,8 +1842,76 @@ async function boot() {
     // Intro and round.
     ui.show('play');
     if (!sync.R || R !== sync.R) return;
+    playHud(R, me, phase, now, firstP, sync.data.street, match.round);
+    if (!b0(R, me)) {
+      const full = match.seats.filter((s) => !s.bot).length >= SEATS;
+      ui.watch(full ? 'Next match' : 'Next round');
+    }
+  }
+
+  const b0 = (R, me) => (me >= 0 ? R.bodies[me] : null);
+
+  /** The Daily Street's HUD: the round as in a match, then its end and the paper's results. */
+  function hudDaily(R, phase, now, firstP) {
+    const g = daily;
+    ui.standings(null);
+    if (g.phase === 'end') {
+      ui.show('none');
+      ui.watch(null);
+      ui.attackerOff();
+      feel.gazette(null);
+      feel.chip(null);
+      if (g.shown) ui.banner('', null);
+      else {
+        const w = g.winner >= 0 ? R.seats[g.winner].name : '';
+        const t = g.won ? 'Your house stands' : w ? `${w}${w.endsWith('s') ? "'" : "'s"} house stands` : 'A tie';
+        ui.banner(`dre${t}`, [{ t, size: 'mid', drop: true }]);
+      }
+      return;
+    }
+    ui.show('play');
+    playHud(R, 0, phase, now, firstP, g.D.street, 0);
+    // Out, with only the neighbours left to settle it: watch as a ghost, or skip to the end.
+    if (g.phase === 'round' && R.houses[0].outAt >= 0 && !g.outAsked && !dailyAuto && now > outBannerUntil + 400 && !ui.cardOpen) {
+      g.outAsked = true;
+      ui.card({
+        msg: 'Your house is out',
+        buttons: [
+          { label: 'Skip to the end', main: true, on: () => (ui.card(null), finishDaily()) },
+          { label: 'Keep playing', on: () => dailyResume() },
+        ],
+      });
+    }
+  }
+
+  function openDailyCard() {
+    if (!daily || daily.phase !== 'round') return;
+    daily.paused = true;
+    input.setActive(false);
+    ui.card({
+      msg: 'Paused',
+      buttons: [
+        { label: 'Resume', main: true, on: () => dailyResume() },
+        { label: 'Leave', on: () => backToTitle() },
+      ],
+    });
+  }
+
+  function dailyResume() {
+    ui.card(null);
+    if (!daily) return;
+    daily.paused = false;
+    sound.click();
+    if (daily.phase === 'round') {
+      input.setActive(true);
+      input.requestLock();
+    }
+  }
+
+  /** The HUD in a round (the match's or the Daily Street's): clock, wind, plates, your plate, the twist, hints, the attacker. */
+  function playHud(R, me, phase, now, firstP, street, roundNo) {
     const elapsed = phase === 'round' ? R.now : 0;
-    ui.clock(elapsed);
+    ui.clock(elapsed, R.storeClose);
     const wind = R.wind;
     const yaw = camera.rotation.y;
     const fx = -Math.sin(yaw);
@@ -1193,26 +1924,31 @@ async function boot() {
     if (b) {
       const h = R.houses[me];
       const out = h.outAt >= 0 || glassCount(h.panes) === 0;
-      ui.mine({ owner: me, n: out ? 0 : glassCount(h.panes), out, ghost: b.ghost, ammo: b.ammo, held: b.held, pebbles: b.pebbles, repair: b.repairing ? Math.min(1, b.repairMs / REPAIR_MS) : 0 });
+      ui.mine({ owner: me, n: out ? 0 : glassCount(h.panes), out, ghost: b.ghost, ammo: b.ammo, held: b.held, pebbles: b.pebbles, repair: b.repairing ? Math.min(1, b.repairMs / R.repairMs) : 0, heat: b.heat, heatNeed: R.rules.heatNeed, hot: b.hot });
       ui.watch(null);
-    } else {
-      ui.mine(null);
-      const full = match.seats.filter((s) => !s.bot).length >= SEATS;
-      ui.watch(full ? 'Next match' : 'Next round');
-    }
+    } else ui.mine(null);
     ui.reticle(firstP && !!b);
     const touch = input.touch || !!ow?.controls?.touch;
-    const active = phase === 'round' && b && !autoplay;
+    const active = phase === 'round' && b && !autoplay && !(screen === 'daily' && dailyAuto);
     ui.keyhint(active && !touch && !ui.cardOpen ? (input.locked ? 'Esc' : input.lockFailed ? null : 'Click') : null);
 
-    // Banners: the round's name, your house falling.
+    // The Gazette before the round: its twist, the street and the round. Then the twist pinned under the wind.
+    const g = gazetteOf(R.twist);
     if (phase === 'intro') {
-      const s = STREETS[sync.data.street];
-      ui.banner(`in${match.round}`, [
-        { t: `Round ${match.round}`, size: 'mid', drop: true },
-        { t: s.name, size: 'blade' },
-      ]);
-    } else if (now < outBannerUntil) ui.banner('out', [{ t: 'Your house is out', size: 'mid', drop: true }]);
+      const kicker = roundNo ? `Round ${roundNo} · ${STREETS[street].name}` : `The Daily Street · ${STREETS[street].name}`;
+      const key = `${kicker}|${R.twist}`;
+      if (key !== paperKey) {
+        paperKey = key;
+        sound.paper();
+      }
+      feel.gazette({ date: dateline(today()), headline: g.head, line: g.line, kicker });
+    } else feel.gazette(null);
+    if (phase === 'round' && R.twist !== 'quiet') {
+      feel.chip({ name: g.chip, line: g.tip });
+      feel.chipAt(ui.windFoot + 10);
+    } else feel.chip(null);
+    if (now < outBannerUntil) ui.banner('out', [{ t: 'Your house is out', size: 'mid', drop: true }]);
+    else if (now < goUntil) ui.banner('go', [{ t: 'Go!', size: 'big', drop: true }]);
     else ui.banner('', null);
 
     // Hints at the moment they matter.
@@ -1268,6 +2004,17 @@ async function boot() {
       get t() {
         return online?.sync?.R?.now ?? 0;
       },
+      /** The round being drawn. */
+      get R() {
+        return drawnR;
+      },
+      world: W,
+      get daily() {
+        return daily;
+      },
+      get screen() {
+        return screen;
+      },
       /** Draw calls in the last frame (shadows included). */
       get calls() {
         return stage.renderer.info.render.calls;
@@ -1275,8 +2022,9 @@ async function boot() {
     };
   }
 
-  ui.title({ stars: 0, total: STREET_COUNT * 3 });
+  refreshTitle();
   booted = true;
   if (wantPlay) pressPlay();
+  else if ((LOCAL || ow?.mode === 'standalone') && params.get('daily')) startDaily();
   requestAnimationFrame(frame);
 }

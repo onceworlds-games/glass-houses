@@ -5,6 +5,7 @@
 import { OWNERS, symbolPath } from './palette.js';
 import { STREETS, STREET_COUNT } from '../core/streets.js';
 import { ROUND_MS, STORE_CLOSE_MS, ROUND_OPTIONS } from '../core/config.js';
+import { flameSvg } from './feel.js';
 
 const STAR = 'M12 1.5l3.1 6.6 7.2.9-5.3 5 1.4 7.1L12 17.6 5.6 21.1 7 14l-5.3-5 7.2-.9z';
 const LOCK = 'M7 10V7a5 5 0 0 1 10 0v3h1.5v11h-13V10zm2.5 0h5V7a2.5 2.5 0 0 0-5 0z';
@@ -114,6 +115,8 @@ export function createUI(root, opts = {}) {
   clock.innerHTML = clockSvg();
   const clockTime = el('div', 'time', clock, '3:00');
   const clockArc = clock.querySelector('.arc');
+  const clockMark = clock.querySelector('.mark');
+  let markAt = -1;
   const clockClosed = el('div', 'closed hidden', clock, 'Closed');
   const wind = el('div', '', hud);
   wind.id = 'wind';
@@ -128,6 +131,11 @@ export function createUI(root, opts = {}) {
   const mineFill = el('div', 'fill', minePlate);
   const mineSym = el('span', '', minePlate);
   const mineNum = el('span', 'num', minePlate, '20');
+  const pips = el('div', '', mine);
+  pips.id = 'heatpips';
+  pips.innerHTML = `${flameSvg()}${flameSvg()}${flameSvg()}<span class="hotlab">HOT</span>`;
+  const pipEls = [...pips.querySelectorAll('svg')];
+  let pipKey = '';
   const ammo = el('div', '', mine);
   ammo.id = 'ammo';
   const ammoEls = [];
@@ -160,6 +168,13 @@ export function createUI(root, opts = {}) {
   const U = {
     get screen() {
       return screen;
+    },
+
+    /** The title screen's element (the career hangs off it). */
+    titleEl: title,
+    /** The foot of the wind arrow (the twist's chip goes under it). */
+    get windFoot() {
+      return (parseFloat(wind.style.top) || 118) + (wind.offsetHeight || 64);
     },
 
     /** 'title', 'lobby', 'play' or 'none'. */
@@ -283,7 +298,7 @@ export function createUI(root, opts = {}) {
       }
     },
 
-    /** Your plate: { owner, n, out, ghost, ammo, held, pebbles, repair (0..1), watching } */
+    /** Your plate: { owner, n, out, ghost, ammo, held, pebbles, repair (0..1), heat, heatNeed, hot } */
     mine(m) {
       toggle(mine, 'hidden', !m);
       if (!m) return;
@@ -304,6 +319,18 @@ export function createUI(root, opts = {}) {
       }
       toggle(minePlate, 'out', m.out);
       mineFill.style.height = `${Math.round((m.repair || 0) * 100)}%`;
+      // Heat: a flame for each glass hit in a row, HOT when the next stone is.
+      const need = m.heatNeed ?? 3;
+      const pk = m.ghost || m.out ? 'off' : `${need}:${m.heat ?? 0}:${m.hot ? 1 : 0}`;
+      if (pk !== pipKey) {
+        pipKey = pk;
+        toggle(pips, 'hidden', pk === 'off');
+        toggle(pips, 'hot', !!m.hot);
+        pipEls.forEach((e, k) => {
+          e.style.display = k < need ? '' : 'none';
+          e.classList.toggle('lit', !m.hot && k < (m.heat ?? 0));
+        });
+      }
       const slots = m.ghost ? 3 : 5;
       for (let k = 0; k < 5; k++) {
         const e = ammoEls[k];
@@ -311,17 +338,22 @@ export function createUI(root, opts = {}) {
         if (k >= slots) cls = 'hidden';
         else if (m.ghost) cls = `pebble${k < m.pebbles ? '' : ' gone'}`;
         else if (k === 0 && m.held) cls = m.held;
+        else if (k === 0 && m.hot && m.ammo > 0) cls = 'hot';
         else cls = k < m.ammo ? '' : 'gone';
         if (e.className !== cls) e.className = cls;
       }
     },
 
     /** The clock: time left, and how far through the round (the store's mark at half). */
-    clock(elapsed) {
+    clock(elapsed, storeClose = STORE_CLOSE_MS) {
       text(clockTime, fmt(ROUND_MS - elapsed));
       const k = Math.min(1, Math.max(0, elapsed / ROUND_MS));
       clockArc.setAttribute('stroke-dashoffset', String((1 - k) * 213.6));
-      const closed = elapsed >= STORE_CLOSE_MS;
+      const closed = elapsed >= storeClose;
+      if (storeClose !== markAt) {
+        markAt = storeClose;
+        clockMark.setAttribute('transform', `rotate(${((storeClose / ROUND_MS) * 360 - 180).toFixed(1)} 50 50)`);
+      }
       toggle(clockClosed, 'hidden', !closed);
       clockArc.setAttribute('stroke', closed ? '#C8553D' : '#2BB7B3');
     },
@@ -549,6 +581,6 @@ function clockSvg() {
     <path d="${rays}" fill="#FFB547" stroke="#2A2238" stroke-width="1.2" stroke-opacity="0.35"/>
     <circle cx="50" cy="50" r="34" fill="#F3E9D8" stroke="#2A2238" stroke-opacity="0.25" stroke-width="1.5"/>
     <circle class="arc" cx="50" cy="50" r="34" fill="none" stroke="#2BB7B3" stroke-width="5" stroke-dasharray="213.6" stroke-dashoffset="213.6" transform="rotate(-90 50 50)"/>
-    <rect x="47.5" y="80" width="5" height="10" rx="1" fill="#C8553D"/>
+    <rect class="mark" x="47.5" y="80" width="5" height="10" rx="1" fill="#C8553D"/>
   </svg>`;
 }

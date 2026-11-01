@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { createBuilder } from './build.js';
 import { OWNERS } from './palette.js';
 import { SHARED } from './materials.js';
+import { throwableMesh } from './throwables.js';
 import { whenRigs, makeBody, restOf, aim, turn, pin, placeOf, boxOf, disposeBody, cleanPose, gripOf, palmOf, rollTo, curl } from './rig.js';
 
 const SKINS = ['#E9B98F', '#C98D62', '#A86E48', '#7A4A2E', '#F0CBA6', '#B97B52'];
@@ -836,6 +837,7 @@ export function makeArm(seat, persona = 'player') {
   group.add(space);
   const d = dress(seat, persona);
   const holds = {};
+  let stoneId = 'river';
   let ready = false;
   let arms = null;
   let body = null;
@@ -859,6 +861,7 @@ export function makeArm(seat, persona = 'player') {
       inHand(g, body, 'R', space, 'ball', k === 'stone' || k === 'pebble' ? 0.05 : 0.07);
       holds[k] = g;
     }
+    wearStone(stoneId);
     for (const n of Object.keys(B)) if (/^(Index|Middle|Ring|Pinky)[123]R$/.test(n)) fingers.push({ bone: B[n], rest: B[n].quaternion.clone() });
     for (const n of ['Thumb1R', 'Thumb2R']) if (B[n]) fingers.push({ bone: B[n], rest: B[n].quaternion.clone(), thumb: true });
     group.traverse((o) => {
@@ -885,6 +888,17 @@ export function makeArm(seat, persona = 'player') {
   });
   // The shoulder sits just below and right of the eye, a little ahead.
   space.position.set(0.25, -0.24, -0.04);
+  /** What's in the hand when it's a stone: the player's own (the Locker's look). */
+  function wearStone(id) {
+    const g = holds.stone;
+    if (!g) return;
+    g.clear();
+    const m = throwableMesh(id);
+    m.renderOrder = 10;
+    m.frustumCulled = false;
+    m.castShadow = false;
+    g.add(m);
+  }
   let lastThrow = -1e9;
   let swingT = -1;
   let bob = 0;
@@ -900,6 +914,18 @@ export function makeArm(seat, persona = 'player') {
     /** How far through the throw (for the camera's kick): s since the release, or -1. */
     get swing() {
       return swingT;
+    },
+    /** The stone in hand looks like this (a throwable id). */
+    setStone(id) {
+      if (id === stoneId) return;
+      stoneId = id;
+      wearStone(id);
+    },
+    /** Where the stone in hand is (world), if it's showing. */
+    stoneAt(out) {
+      const g = holds.stone;
+      if (!g || !g.visible || !group.visible) return null;
+      return g.getWorldPosition(out);
     },
     update(b, t, dt, ghost) {
       dt = Math.min(dt, 0.1);
@@ -990,7 +1016,7 @@ export function makeArm(seat, persona = 'player') {
     dispose() {
       if (body) disposeBody(body);
       group.traverse((o) => {
-        if (o.isSkinnedMesh) return;
+        if (o.isSkinnedMesh || o.userData.shared) return;
         o.geometry?.dispose?.();
         o.material?.dispose?.();
       });

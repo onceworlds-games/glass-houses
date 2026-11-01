@@ -11,6 +11,20 @@ const CELL_U = PANE_W + MULLION;
 const CELL_Y = PANE_H + MULLION;
 const SHARDS = { low: 220, medium: 600, high: 1100 };
 
+/** The tints a player can wear on their glass (career.js LOOKS.tint): colour and how much. Stained glass is per pane. */
+export const TINTS = {
+  clear: null,
+  sea: ['#46C6B8', 0.6],
+  amber: ['#F0A030', 0.65],
+  rose: ['#F07090', 0.6],
+  cobalt: ['#3060E0', 0.65],
+  smoke: ['#1E1E26', 0.8],
+  mint: ['#80E8B4', 0.55],
+  mirror: ['#C8CED8', 3],
+  stained: 'stained',
+};
+const STAINED = ['#D8343A', '#2F5BD8', '#F0B030', '#3AA05A', '#8A3FB8', '#F07030'];
+
 /**
  * Glass as light does it: what it reflects is added on top, what is behind shows through, dimmed by the tint. Straight on you see
  * into the room; at a glance along the front it turns to mirror (fresnel). Each pane leans a hair differently (`tilt`), so the
@@ -34,16 +48,19 @@ export function glassMaterial(opts = {}) {
   m.blendDst = THREE.OneMinusSrcAlphaFactor;
   m.blendEquation = THREE.AddEquation;
   const tilted = !!opts.tilt;
+  const tinted = !!opts.tinted;
+  const clock = opts.clock ?? { value: 0 };
   const sheen = opts.sheen ?? 0;
   const reflect = (opts.reflect ?? 4.5).toFixed(2);
   m.onBeforeCompile = (shader) => {
     shader.fragmentShader = `#define REFLECT ${reflect}\n#define SHEEN ${sheen.toFixed(2)}\n${sheen > 0 ? '#define SHEEN_ON\n' : ''}${shader.fragmentShader}`;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nvarying vec2 vGlassUv;\nvarying float vGlassSeed;${tilted ? '\nattribute vec2 tilt;' : ''}`)
-      .replace('#include <uv_vertex>', `#include <uv_vertex>\nvGlassUv = uv;\nvGlassSeed = ${tilted ? 'tilt.x * 13.0 + tilt.y * 7.0' : '0.0'};`);
+      .replace('#include <common>', `#include <common>\nvarying vec2 vGlassUv;\nvarying float vGlassSeed;\nvarying vec4 vPaneTint;${tilted ? '\nattribute vec2 tilt;' : ''}${tinted ? '\nattribute vec4 paneTint;' : ''}`)
+      .replace('#include <uv_vertex>', `#include <uv_vertex>\nvGlassUv = uv;\nvGlassSeed = ${tilted ? 'tilt.x * 13.0 + tilt.y * 7.0' : '0.0'};\nvPaneTint = ${tinted ? 'paneTint' : 'vec4(0.0)'};`);
+    shader.uniforms.uGlassTime = clock;
     if (tilted) shader.vertexShader = shader.vertexShader.replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nobjectNormal = normalize(objectNormal + vec3(tilt, 0.0));');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vGlassUv;\nvarying float vGlassSeed;')
+      .replace('#include <common>', '#include <common>\nvarying vec2 vGlassUv;\nvarying float vGlassSeed;\nvarying vec4 vPaneTint;\nuniform float uGlassTime;')
       .replace(
         '#include <opaque_fragment>',
         `{
@@ -64,6 +81,21 @@ export function glassMaterial(opts = {}) {
           float d = fract(g.x * 0.75 + g.y * 0.42 + vGlassSeed) ;
           float streak = smoothstep(0.09, 0.0, abs(d - 0.38)) * 0.6 + smoothstep(0.03, 0.0, abs(d - 0.53)) * 0.4;
           vec3 body = vec3(0.03, 0.075, 0.1) * (0.5 + g.y);
+          if (vPaneTint.w > 2.5) {
+            // One-way mirror: silver, and it gives back the whole street.
+            body = vec3(0.16, 0.17, 0.19) * (0.6 + g.y * 0.6);
+            outgoingLight += totalSpecular * 5.0;
+            diffuseColor.a = max(diffuseColor.a, 0.88);
+          } else if (vPaneTint.w > 1.5) {
+            // A golden pane: leaf gold, and a glint that sweeps across it.
+            float sweep = smoothstep(0.07, 0.0, abs(fract(g.x * 0.55 + g.y * 0.45 - uGlassTime * 0.32 + vGlassSeed * 0.2) - 0.5));
+            body = vec3(0.62, 0.4, 0.06) * (0.55 + g.y * 0.7) + vec3(1.0, 0.86, 0.45) * sweep * 0.9;
+            outgoingLight += totalSpecular * 2.0 * vec3(1.0, 0.8, 0.4);
+            diffuseColor.a = max(diffuseColor.a, 0.9);
+          } else if (vPaneTint.w > 0.0) {
+            body = mix(body, vPaneTint.rgb * (0.45 + g.y * 0.55) * 0.42, vPaneTint.w);
+            diffuseColor.a = max(diffuseColor.a, 0.6 + vPaneTint.w * 0.22);
+          }
           outgoingLight += (body + vec3(1.0, 0.97, 0.92) * streak * 0.11) * SHEEN;
           diffuseColor.a = max(diffuseColor.a, 0.6 + streak * 0.15 * SHEEN);
           #endif
@@ -71,7 +103,7 @@ export function glassMaterial(opts = {}) {
         #include <opaque_fragment>`,
       );
   };
-  m.customProgramCacheKey = () => `glass:${tilted}:${reflect}:${sheen}`;
+  m.customProgramCacheKey = () => `glass:${tilted}:${tinted}:${reflect}:${sheen}`;
   return m;
 }
 
@@ -221,7 +253,8 @@ export function createGlass(field, scene, quality = 'medium') {
   const frames = field.houses.map(houseFrame);
   const smudge = smudgeTexture();
   if (smudge) smudge.colorSpace = THREE.NoColorSpace;
-  const paneMat = glassMaterial({ roughnessMap: smudge, roughness: 1.0, opacity: 0.62, tilt: true, reflect: 3.2, sheen: 1 });
+  const clock = { value: 0 };
+  const paneMat = glassMaterial({ roughnessMap: smudge, roughness: 1.0, opacity: 0.62, tilt: true, tinted: true, clock, reflect: 3.2, sheen: 1 });
   // Pre-mirrored: the house frames mirror, and an instance matrix can't flip a mesh's facing the way an object's matrix does.
   const paneGeo = new THREE.PlaneGeometry(PANE_W, PANE_H).scale(-1, 1, 1);
   const panes = new THREE.InstancedMesh(paneGeo, paneMat, total);
@@ -306,6 +339,36 @@ export function createGlass(field, scene, quality = 'medium') {
     tilt[i * 2 + 1] = (rng.next() - 0.5) * 0.05;
   }
   paneGeo.setAttribute('tilt', new THREE.InstancedBufferAttribute(tilt, 2));
+  // Each pane's tint (rgb, amount; 2 = a golden pane, 3 = mirror): what its owner wears, and the Gazette's golden panes.
+  const tintArr = new Float32Array(total * 4);
+  const tintAttr = new THREE.InstancedBufferAttribute(tintArr, 4);
+  tintAttr.setUsage(THREE.DynamicDrawUsage);
+  paneGeo.setAttribute('paneTint', tintAttr);
+  const wearing = new Array(n).fill('clear');
+  const goldMask = new Array(n).fill(0);
+  const tc = new THREE.Color();
+  function paintHouse(h) {
+    const t = TINTS[wearing[h]] ?? null;
+    for (let p = 0; p < PANES; p++) {
+      const i = (h * PANES + p) * 4;
+      if (goldMask[h] & (1 << p)) {
+        tintArr.set([1, 0.8, 0.3, 2], i);
+        continue;
+      }
+      if (!t) {
+        tintArr.set([0, 0, 0, 0], i);
+        continue;
+      }
+      if (t === 'stained') {
+        tc.set(STAINED[(p * 7 + h * 3 + Math.floor(p / COLS)) % STAINED.length]);
+        tintArr.set([tc.r, tc.g, tc.b, 0.85], i);
+      } else {
+        tc.set(t[0]);
+        tintArr.set([tc.r, tc.g, tc.b, t[1]], i);
+      }
+    }
+    tintAttr.needsUpdate = true;
+  }
   panes.instanceMatrix.needsUpdate = true;
   if (panes.instanceColor) panes.instanceColor.needsUpdate = true;
   const state = new Uint8Array(total).fill(GLASS);
@@ -357,6 +420,8 @@ export function createGlass(field, scene, quality = 'medium') {
   const life = new Float32Array(cap);
   const live = new Uint8Array(cap);
   const bigOne = new Uint8Array(cap);
+  const Tc = new Float32Array(cap * 3).fill(1);
+  const shardTint = [1, 1, 1];
   let next = 0;
   let pileNext = 0;
   let pileCount = 0;
@@ -451,6 +516,9 @@ export function createGlass(field, scene, quality = 'medium') {
     life[i] = 0;
     live[i] = 1;
     bigOne[i] = big ? 1 : 0;
+    Tc[i * 3] = shardTint[0];
+    Tc[i * 3 + 1] = shardTint[1];
+    Tc[i * 3 + 2] = shardTint[2];
     return i;
   }
 
@@ -551,6 +619,10 @@ export function createGlass(field, scene, quality = 'medium') {
       const dx = (dir?.x ?? -house.fx) / sp;
       const dz = (dir?.z ?? -house.fz) / sp;
       const grow = 1 + Math.min(1.2, Math.max(0, (far - 10) / 18));
+      // Shards keep the pane's colour.
+      const ti = (h * PANES + p) * 4;
+      const amt = tintArr[ti + 3] >= 2 ? (tintArr[ti + 3] >= 3 ? 0.3 : 0.9) : tintArr[ti + 3] * 0.8;
+      for (let k = 0; k < 3; k++) shardTint[k] = 1 + (tintArr[ti + k] * 1.2 - 1) * Math.min(1, amt);
       for (let k = 0; k < count; k++) {
         const back = Math.random() < 0.34;
         const along = back ? -0.08 - Math.random() * 0.18 : 0.25 + Math.random() * 0.45;
@@ -582,10 +654,25 @@ export function createGlass(field, scene, quality = 'medium') {
     /** Big pieces that hit the ground since the last call: { x, y, z } (then cleared). */
     lands,
 
+    /** What a house's owner wears on their glass (a LOOKS.tint id). */
+    setTint(h, id) {
+      if (h < 0 || h >= n || wearing[h] === id) return;
+      wearing[h] = TINTS[id] !== undefined ? id : 'clear';
+      paintHouse(h);
+    },
+
+    /** Which of a house's panes are golden today (a bitmask over its panes). */
+    setGold(h, mask) {
+      if (h < 0 || h >= n || goldMask[h] === (mask | 0)) return;
+      goldMask[h] = mask | 0;
+      paintHouse(h);
+    },
+
     /** Moves the shards still in the air; still ones go to the piles. */
     update(dt) {
       let moved = false;
       gTime += dt;
+      clock.value = gTime;
       glitterMat.uniforms.uTime.value = gTime;
       for (let i = 0; i < cap; i++) {
         if (live[i] !== 1) continue;
@@ -644,7 +731,7 @@ export function createGlass(field, scene, quality = 'medium') {
         shards.setMatrixAt(i, m);
         // A white-hot flash as it leaves the frame, then glass.
         const f = 1 + 2.6 * Math.exp(-life[i] * 9);
-        shards.setColorAt(i, flash.setRGB(f, f, f));
+        shards.setColorAt(i, flash.setRGB(f * Tc[i * 3], f * Tc[i * 3 + 1], f * Tc[i * 3 + 2]));
       }
       if (moved) {
         shards.instanceMatrix.needsUpdate = true;

@@ -36,7 +36,8 @@ export async function joinRoom(ow) {
 const lineupNames = (street) => STREETS[street].lineup.map((p) => PERSONAS[p].name);
 
 /**
- * opts: { ow, room, autoplay, gentle(streetIndex) → bool, onRound(R, info), onResults(standings, mine), onClose(reason) }
+ * opts: { ow, room, autoplay, gentle(streetIndex) → bool, look() → this player's look code, onRound(R, info), onResults(standings, mine),
+ * onClose(reason) }
  */
 export function createOnline(opts) {
   const { room } = opts;
@@ -58,6 +59,7 @@ export function createOnline(opts) {
     myId: room.me.id,
     autoplay: !!opts.autoplay,
     gentle: false,
+    look: opts.look,
     send: (msg) => room.send(msg),
     grab: (id) => {
       grabCall({ id }).then((r) => {

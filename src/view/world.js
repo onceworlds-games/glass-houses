@@ -5,6 +5,7 @@ import { buildStreet } from './street.js';
 import { createGlass } from './glass.js';
 import { makeFigure } from './people.js';
 import { createFx } from './fx.js';
+import { createLawns } from './lawn.js';
 import { buildField, STREETS } from '../core/streets.js';
 import { glassCount } from '../core/round.js';
 
@@ -16,7 +17,9 @@ export function createWorld(stage) {
     field: null,
     street: null,
     glass: null,
-    fx: createFx(scene, stage.quality),
+    fx: createFx(scene, stage.quality, stage.camera),
+    /** What each house's owner wears: { stone, trail, tint, lawn } per seat (null: the defaults). */
+    looks: [],
     figures: [],
     personas: [],
     me: -1,
@@ -37,6 +40,7 @@ export function createWorld(stage) {
   W.setStreet = function setStreet(i, quality = stage.quality) {
     if (W.index === i && W.quality === quality && W.street) return false;
     if (W.street) {
+      W.lawns?.dispose();
       scene.remove(W.street.root);
       W.street.dispose();
     }
@@ -50,6 +54,8 @@ export function createWorld(stage) {
     const light = STREETS[i].light;
     stage.setLight(light, W.field.R);
     W.fx.setField(W.field, light === 'snow');
+    W.lawns = createLawns(W.field, W.street.root, W.fx, light === 'snow');
+    W.setLooks(W.looks);
     // The street itself into every pane's reflection: the houses across, the palms, the sky.
     W.street.update(0, 0, { x: 1, z: 0, s: 0.5 });
     stage.captureStreet([W.glass.group, W.fx.group, ...W.figures.flatMap((f) => [f.root, f.ghost])]);
@@ -73,6 +79,17 @@ export function createWorld(stage) {
     }
   };
 
+  /** Sets what each seat wears (an array of looks or nulls): their glass and lawn now, their stones as they throw. */
+  W.setLooks = function setLooks(list) {
+    for (let i = 0; i < 6; i++) {
+      const look = list[i] ?? null;
+      W.looks[i] = look;
+      W.glass?.setTint(i, look?.tint ?? 'clear');
+      W.lawns?.set(i, look?.lawn ?? 'bare');
+    }
+  };
+  const lookOf = (seat) => W.looks[seat] ?? null;
+
   /** A new round on the same street: shards swept, stones gone. */
   W.sweep = function sweep() {
     W.glass?.clear();
@@ -86,6 +103,7 @@ export function createWorld(stage) {
     W.glass.sync(R.houses);
     for (let i = 0; i < R.houses.length; i++) {
       const h = R.houses[i];
+      W.glass.setGold(i, h.gold ?? 0);
       const n = glassCount(h.panes);
       const out = h.outAt >= 0 || n === 0;
       st.setNumber(i, out ? 0 : n, out);
@@ -98,10 +116,11 @@ export function createWorld(stage) {
         if (W.ghostsOff) W.figures[i].ghost.visible = false;
       } else W.figures[i].root.visible = W.figures[i].ghost.visible = false;
     }
-    W.fx.stones(R.stones, t, incoming);
+    W.fx.stones(R.stones, t, incoming, lookOf, W.me);
     W.fx.specials(R.specials, R.now);
     st.store.set(R.storeOpen());
     st.update(dt, t / 1000, wind);
+    W.lawns.update(dt, t);
     W.fx.update(dt, t, wind);
     W.glass.setScale((stage.height * stage.pixelRatio) / (2 * Math.tan((stage.camera.fov * Math.PI) / 360)));
     W.glass.update(dt);
