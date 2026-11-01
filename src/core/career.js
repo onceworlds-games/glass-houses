@@ -264,5 +264,26 @@ export function dailyScore(info) {
   return Math.max(0, Math.min(99999, Math.round(s)));
 }
 
+/**
+ * The neighbourhood's wall for a day, from the shared list (ow.data items { value: { d, s, st }, by: { id, name } }, written by
+ * any player's page, so read with care): each player's best that day, best first, at most `max`. `me`: this player's id.
+ */
+export function wallOf(list, day, me = '', max = 20) {
+  if (!Array.isArray(list)) return [];
+  const best = new Map();
+  for (const it of list) {
+    const v = it?.value;
+    if (!v || typeof v !== 'object' || v.d !== day || typeof v.s !== 'number' || !Number.isFinite(v.s)) continue;
+    const id = typeof it.by?.id === 'string' || typeof it.by?.id === 'number' ? String(it.by.id) : '';
+    if (!id) continue;
+    const score = Math.max(0, Math.min(99999, Math.round(v.s)));
+    const prev = best.get(id);
+    if (prev && prev.score >= score) continue;
+    const name = typeof it.by?.name === 'string' && it.by.name.trim() ? it.by.name.trim().slice(0, 24) : 'Neighbour';
+    best.set(id, { name, score, me: !!me && id === String(me) });
+  }
+  return [...best.values()].sort((a, b) => b.score - a.score).slice(0, max);
+}
+
 /** A street's name, for the Daily Street's headline. */
 export const streetName = (i) => STREETS[i]?.name ?? 'The Street';

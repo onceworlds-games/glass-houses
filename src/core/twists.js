@@ -59,6 +59,20 @@ export function pickTwist(seed, round, prev = '') {
   return ids[ids.length - 1];
 }
 
+/**
+ * The twist of round `round` of a match, from a seed per round that every page can draw (`seedOf(r)`, the match's shared random):
+ * a chain from round 1, so any page knows any round's twist at any time (the Gazette shows it before the round's data exists).
+ */
+export function matchTwist(seedOf, round) {
+  let prev = '';
+  let t = 'quiet';
+  for (let r = 1; r <= round; r++) {
+    t = pickTwist(seedOf(r), r, prev);
+    prev = t;
+  }
+  return t;
+}
+
 /** The golden panes of a round: the same few on every house (fair), from the seed. */
 export function goldPanes(seed, round, n, panes = 20, cols = 10) {
   if (n <= 0) return [];

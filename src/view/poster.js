@@ -20,7 +20,7 @@ export async function runPoster(params) {
   const rng = createRng(`poster:${name}`);
   Math.random = rng.next;
   document.body.dataset.flow = 'poster';
-  await Promise.race([Promise.all([document.fonts.load('700 40px "Josefin Sans"'), document.fonts.load('500 20px Jost')]).catch(() => {}), new Promise((r) => setTimeout(r, 2500))]);
+  await Promise.race([Promise.all([document.fonts.load('700 40px "Josefin Sans"'), document.fonts.load('500 20px Jost'), document.fonts.load('400 40px "Abril Fatface"')]).catch(() => {}), new Promise((r) => setTimeout(r, 2500))]);
   await document.fonts.ready;
   if (name.startsWith('badge-')) {
     badge(name.slice(6), w, h);
@@ -455,6 +455,8 @@ function fp(stage, W, w, h, params) {
 
 // ------------------------------------------------------------------ badges: a bold symbol on a coloured disc
 
+const FLAME_D = 'M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-5 3-6 0 2 1 3 2 3 0-3-1-6 1-9z';
+
 const BADGE_ART = {
   'first-stone': { bg: '#C8553D', art: stone(0, 0, 1.25) },
   shattered: { bg: '#2BB7B3', art: pane(true) },
@@ -466,6 +468,16 @@ const BADGE_ART = {
   fore: { bg: '#E5B83B', art: fore() },
   'house-proud': { bg: '#2F6B4F', art: burst() },
   'the-whole-street': { bg: '#C8553D', art: street() },
+  'hot-hands': { bg: '#B8372B', art: `${flame(0, -18, 6.2, '#FFB547')}${flame(0, -2, 3.6, '#FFE08A')}${stone(0, 34, 0.86)}` },
+  firefighter: { bg: '#3563B8', art: `${stone(-42, 40, 0.86)}${flame(44, -60, 4.4, '#FFB547')}${flame(44, -44, 2.4, '#FFE08A')}${stone(44, -28, 0.8)}<g transform="scale(1.25)">${spark()}</g>` },
+  salvage: { bg: '#6F8F3A', art: salvage() },
+  'long-shot': { bg: '#8A4F9E', art: longShot() },
+  'daily-paper': { bg: '#E5B83B', art: paper() },
+  'job-done': { bg: '#2BB7B3', art: clipboard() },
+  regular: { bg: '#F08A24', art: calendar('3') },
+  'neighbourhood-watch': { bg: '#2F6B4F', art: calendar('7') },
+  'rock-hound': { bg: '#E8645A', art: level('10') },
+  'street-legend': { bg: '#4B2E6B', art: `<g transform="translate(0 14) scale(0.88)">${level('30')}</g>${crown()}` },
 };
 
 function badge(id, w, h) {
@@ -555,4 +567,63 @@ function street() {
     s += `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${((a * 180) / Math.PI + 90).toFixed(1)})"><rect x="-16" y="-12" width="32" height="24" fill="#CFEFF0" stroke="#F3E9D8" stroke-width="5"/><rect x="-19" y="-17" width="38" height="6" fill="#F3E9D8"/></g>`;
   }
   return `${s}<circle r="18" fill="#6F8F3A" stroke="#F3E9D8" stroke-width="5"/>`;
+}
+
+function flame(x, y, s, fill) {
+  return `<path transform="translate(${x} ${y}) scale(${s}) translate(-12 -12)" d="${FLAME_D}" fill="${fill}" stroke="#F3E9D8" stroke-width="${(5 / s).toFixed(2)}" stroke-linejoin="round"/>`;
+}
+
+function salvage() {
+  const pane = '<rect x="-34" y="-42" width="68" height="80" rx="3" fill="#CFEFF0" stroke="#F3E9D8" stroke-width="8"/><path d="M-34 -42 L-12 -42 L-34 -14 Z" fill="#FFFFFF" opacity="0.7"/>';
+  const arrow = '<path d="M-62 40 A70 70 0 1 1 60 40" fill="none" stroke="#FFB547" stroke-width="12" stroke-linecap="round"/><path d="M72 32 L44 26 L50 62 Z" fill="#FFB547" stroke="#FFB547" stroke-width="4" stroke-linejoin="round"/>';
+  return `${arrow}${pane}`;
+}
+
+function longShot() {
+  const arc = '<path d="M-70 66 Q -14 -118 56 -18" fill="none" stroke="#F3E9D8" stroke-width="8" stroke-linecap="round" stroke-dasharray="2 17"/>';
+  const pane = '<g transform="translate(64 -6) rotate(8)"><rect x="-26" y="-32" width="52" height="64" rx="3" fill="#CFEFF0" stroke="#F3E9D8" stroke-width="7"/><path d="M-2 -4 L-14 -30 M-2 -4 L14 -30 M-2 -4 L24 -8 M-2 -4 L18 30 M-2 -4 L-8 30 M-2 -4 L-24 6 M-10 -14 L6 -16 L12 0 L0 10 L-12 4 Z" fill="none" stroke="#2A2238" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"/></g>';
+  return `${arc}${pane}${stone(-72, 66, 0.5)}${sparkle(40, -70, 0.6)}`;
+}
+
+function paper() {
+  let s = '<g transform="rotate(-7)"><rect x="-74" y="-64" width="148" height="128" rx="4" fill="#FBF6EC" stroke="#F3E9D8" stroke-width="6"/>';
+  s += '<text x="0" y="-26" text-anchor="middle" font-family="Abril Fatface" font-size="30" fill="#2A2238">GAZETTE</text>';
+  s += '<rect x="-60" y="-18" width="120" height="5" fill="#2A2238"/>';
+  s += '<rect x="-60" y="-4" width="56" height="52" fill="#CFEFF0" stroke="#2A2238" stroke-width="3"/><path d="M-56 44 L-34 18 L-20 32 L-8 22 L-8 44 Z" fill="#6F8F3A"/>';
+  for (let k = 0; k < 5; k++) s += `<rect x="6" y="${-2 + k * 11}" width="${k === 4 ? 34 : 54}" height="5" rx="2" fill="#B9B0A4"/>`;
+  return `${s}</g>`;
+}
+
+function clipboard() {
+  let s = '<rect x="-58" y="-70" width="116" height="150" rx="10" fill="#A0703C" stroke="#F3E9D8" stroke-width="6"/>';
+  s += '<rect x="-46" y="-52" width="92" height="120" rx="3" fill="#FBF6EC"/>';
+  s += '<rect x="-26" y="-82" width="52" height="24" rx="6" fill="#B9B0A4" stroke="#F3E9D8" stroke-width="5"/>';
+  for (let k = 0; k < 3; k++) {
+    const y = -26 + k * 34;
+    s += `<path d="M-36 ${y} l8 9 l16 -18" fill="none" stroke="#2F6B4F" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`;
+    s += `<rect x="-2" y="${y - 3}" width="40" height="7" rx="3" fill="#B9B0A4"/>`;
+  }
+  return s;
+}
+
+function calendar(n) {
+  let s = '<rect x="-62" y="-60" width="124" height="134" rx="10" fill="#FBF6EC" stroke="#F3E9D8" stroke-width="6"/>';
+  s += '<path d="M-62 -26 V-50 a10 10 0 0 1 10 -10 H52 a10 10 0 0 1 10 10 V-26 Z" fill="#D93A2F"/>';
+  s += '<rect x="-36" y="-76" width="12" height="30" rx="6" fill="#F3E9D8"/><rect x="24" y="-76" width="12" height="30" rx="6" fill="#F3E9D8"/>';
+  s += `<text x="0" y="58" text-anchor="middle" font-family="Abril Fatface" font-size="86" fill="#2A2238">${n}</text>`;
+  return `${s}${flame(58, 56, 2.6, '#FFB547')}`;
+}
+
+function level(n) {
+  let d = '';
+  for (let k = 0; k < 24; k++) {
+    const a = (k / 24) * Math.PI * 2;
+    const r = k % 2 ? 72 : 92;
+    d += `${k ? 'L' : 'M'}${(Math.sin(a) * r).toFixed(1)} ${(-Math.cos(a) * r).toFixed(1)} `;
+  }
+  return `<path d="${d}Z" fill="#FFB547" stroke="#F3E9D8" stroke-width="5" stroke-linejoin="round"/><circle r="58" fill="#FBF6EC"/><text x="0" y="22" text-anchor="middle" font-family="Abril Fatface" font-size="${n.length > 1 ? 62 : 78}" fill="#2A2238">${n}</text>`;
+}
+
+function crown() {
+  return '<path d="M-46 -50 L-54 -90 L-24 -72 L0 -102 L24 -72 L54 -90 L46 -50 Z" fill="#FFD25A" stroke="#F3E9D8" stroke-width="6" stroke-linejoin="round"/><circle cx="0" cy="-70" r="7" fill="#D93A2F"/>';
 }

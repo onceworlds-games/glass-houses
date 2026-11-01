@@ -135,6 +135,9 @@ export function createFeel(root) {
     /** A knockout: mine (I did it) or someone's; line under the word. */
     knockout(line, mine, now = performance.now()) {
       koLine.textContent = line;
+      // The knockout has the middle to itself: a stamp showing makes way, the queue waits.
+      stamp.classList.remove('on');
+      stampUntil = 0;
       ko.classList.toggle('mine', !!mine);
       koWord.textContent = mine ? 'KNOCKOUT!' : 'KNOCKOUT';
       restart(ko, 'on');
@@ -214,7 +217,7 @@ export function createFeel(root) {
         stampUntil = 0;
         stamp.classList.remove('on');
       }
-      if (!stampUntil && queue.length) {
+      if (!stampUntil && queue.length && !(koUntil && now < koUntil - 500)) {
         const t = queue.shift();
         stampName.textContent = t.name;
         stampXp.textContent = t.xp ? `+${t.xp} XP` : '';

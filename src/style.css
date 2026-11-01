@@ -605,7 +605,7 @@ html, body {
 #feel .stamp {
   position: absolute;
   left: 50%;
-  top: 27%;
+  top: 35%;
   transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
@@ -620,6 +620,8 @@ html, body {
   text-shadow: 3px 4px 0 rgba(42, 34, 56, 0.7), 0 0 18px rgba(255, 181, 71, 0.35);
   white-space: nowrap;
 }
+/* The twist's chip steps aside while something is stamped over the middle. */
+#feel:has(.stamp.on, .ko.on, .warn.on) .chip { opacity: 0; }
 #feel .stamp .xp { font: 700 20px var(--display); color: var(--cream); text-shadow: 2px 2px 0 rgba(42, 34, 56, 0.6); }
 #feel .stamp.on { animation: stamp 1.4s cubic-bezier(0.2, 1.5, 0.4, 1) forwards; }
 @keyframes stamp {
@@ -690,7 +692,7 @@ html, body {
 #feel .toast {
   position: absolute;
   left: 50%;
-  bottom: 30%;
+  top: 57%;
   transform: translateX(-50%);
   padding: 7px 14px 4px;
   border-radius: 8px;
@@ -777,6 +779,7 @@ html, body {
   border-radius: 2px;
   box-shadow: 3px 4px 0 rgba(42, 34, 56, 0.45);
   white-space: nowrap;
+  transition: opacity 0.15s;
 }
 #feel .chip .nm { font: 400 18px var(--paper); line-height: 1.05; }
 #feel .chip .ln { font: 500 12px var(--label); opacity: 0.8; }
@@ -1000,36 +1003,40 @@ html, body {
 #locker .foot .note { flex: 1; font: 500 14px var(--label); color: var(--terra); }
 #locker .foot .done { height: 52px; padding: 4px 26px 0 !important; border-radius: 10px; background: var(--gold) !important; color: var(--ink); font: 700 24px var(--display) !important; box-shadow: 3px 4px 0 rgba(42, 34, 56, 0.45); }
 
-/* The XP a round paid. */
+/* The XP a round paid: a till receipt from the hardware store, torn off at the bottom. */
 #xp {
   position: absolute;
   left: max(16px, 3vw);
   top: 50%;
-  transform: translateY(-50%);
-  width: 290px;
-  padding: 12px 16px 14px;
-  border-radius: 12px;
-  background: rgba(42, 34, 56, 0.82);
-  box-shadow: 4px 6px 0 rgba(42, 34, 56, 0.35);
+  transform: translateY(-50%) rotate(-1.2deg);
+  width: 300px;
+  filter: drop-shadow(4px 6px 0 rgba(42, 34, 56, 0.4));
 }
-#xp .xh { font-size: 26px; margin-bottom: 6px; color: var(--gold); }
+#xp .rc {
+  padding: 12px 18px 22px;
+  background: #fbf6ec;
+  color: var(--ink);
+  -webkit-mask: radial-gradient(7px at 50% 100%, #0000 97%, #000) 50% 0 / 16px 100%;
+  mask: radial-gradient(7px at 50% 100%, #0000 97%, #000) 50% 0 / 16px 100%;
+}
+#xp .xh { font: 400 30px var(--paper); line-height: 1; text-align: center; padding-bottom: 6px; border-bottom: 2px dashed rgba(42, 34, 56, 0.35); margin-bottom: 6px; }
 #xp .ln, #xp .tot, #xp .jobsdone, #xp .streakline { opacity: 0; animation: xpin 0.28s ease-out forwards; }
-#xp .ln { display: flex; justify-content: space-between; gap: 10px; font: 500 15px var(--label); padding: 3px 0; }
-#xp .ln b { font: 700 15px var(--display); color: var(--gold); }
-#xp .tot { display: flex; justify-content: space-between; margin-top: 6px; padding-top: 7px; border-top: 2px solid rgba(255, 255, 255, 0.25); font: 700 19px var(--display); }
-#xp .tot b { color: var(--gold); }
+#xp .ln { display: flex; justify-content: space-between; gap: 10px; font: 500 15px var(--label); padding: 2px 0; }
+#xp .ln b { font: 700 15px var(--display); color: var(--ink); }
+#xp .tot { display: flex; justify-content: space-between; margin-top: 6px; padding-top: 7px; border-top: 2px dashed rgba(42, 34, 56, 0.35); font: 700 20px var(--display); }
+#xp .tot b { color: var(--terra); }
 #xp .lv { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
-#xp .lv .badge { flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; padding-top: 3px; background: var(--gold); color: var(--ink); font: 700 19px var(--display); box-shadow: 2px 3px 0 rgba(0, 0, 0, 0.35); }
+#xp .lv .badge { flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; padding-top: 3px; background: var(--gold); color: var(--ink); font: 700 19px var(--display); box-shadow: 2px 3px 0 rgba(42, 34, 56, 0.35); }
 #xp .lv .badge.pop { animation: pop 0.5s cubic-bezier(0.2, 1.8, 0.4, 1); }
-#xp .lv .bar { flex: 1; height: 11px; border-radius: 6px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
-#xp .lv .bar i { display: block; height: 100%; background: linear-gradient(90deg, #ffd27a, #ffb547); }
+#xp .lv .bar { flex: 1; height: 12px; border-radius: 6px; background: rgba(42, 34, 56, 0.14); overflow: hidden; }
+#xp .lv .bar i { display: block; height: 100%; background: linear-gradient(90deg, #ffc35a, #f08a24); }
 #xp .up { margin-top: 10px; text-align: center; animation: pop 0.5s cubic-bezier(0.2, 1.8, 0.4, 1); }
-#xp .up .w { font: 400 34px var(--paper); color: var(--gold); text-shadow: 2px 3px 0 rgba(0, 0, 0, 0.4); }
-#xp .up .r { font: 700 15px var(--display); color: #fff; }
-#xp .up .unl { font: 500 14px var(--label); color: #bfeedd; margin-top: 3px; }
-#xp .jobsdone { margin-top: 8px; font: 700 14px var(--display); color: #bfeedd; }
-#xp .streakline { display: flex; align-items: center; gap: 6px; margin-top: 8px; font: 700 15px var(--display); color: #ffe08a; }
-#xp .streakline svg { width: 18px; height: 20px; fill: #ff8a1a; }
+#xp .up .w { font: 400 38px var(--paper); line-height: 1.05; color: var(--terra); }
+#xp .up .r { font: 700 15px var(--display); color: var(--ink); }
+#xp .up .unl { font: 700 14px var(--label); color: #2f6b4f; margin-top: 3px; }
+#xp .jobsdone { margin-top: 8px; font: 700 14px var(--display); color: #2f6b4f; }
+#xp .streakline { display: flex; align-items: center; gap: 6px; margin-top: 8px; font: 700 15px var(--display); color: var(--ink); }
+#xp .streakline svg { width: 18px; height: 20px; fill: #f08a24; }
 @keyframes xpin { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
 @keyframes pop { 0% { transform: scale(0.4); } 100% { transform: scale(1); } }
 
@@ -1079,7 +1086,8 @@ html, body {
   #title .daily-btn .k { font-size: 16px !important; }
   #locker .sheet { left: 12px; right: 12px; top: auto; bottom: 12px; width: auto; height: 50%; }
   #locker .lhead { top: max(64px, 8vh); }
-  #xp { left: 12px; right: 12px; top: 12px; width: auto; transform: none; padding: 8px 12px 10px; }
+  #xp { left: 12px; right: 12px; top: 12px; width: auto; transform: none; }
+  #xp .rc { padding: 8px 12px 18px; }
   #xp .xh, #xp .ln, #xp .jobsdone, #xp .streakline { display: none; }
   #xp .tot { margin-top: 0; border-top: 0; padding-top: 0; }
   #dailyres { place-items: end center; padding-bottom: 20px; }
@@ -1098,7 +1106,8 @@ html, body {
   #title .daily-btn { left: calc(50% + 74px); }
   #locker .sheet { top: 12px; bottom: 12px; width: min(400px, 52vw); }
   #locker .tiles { grid-template-columns: repeat(4, 1fr); }
-  #xp { top: 12px; transform: none; padding: 8px 12px; }
+  #xp { top: 12px; transform: none; }
+  #xp .rc { padding: 8px 12px 18px; }
   #xp .ln { font-size: 13px; padding: 1px 0; }
   #dailyres .paper { padding: 8px 16px 10px; }
   #dailyres .score .v { font-size: 40px; }

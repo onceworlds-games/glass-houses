@@ -10,7 +10,7 @@ import { readRoundData, readHouses, newerMask } from './core/net.js';
 import { STREETS, STREET_COUNT } from './core/streets.js';
 import { PERSONAS } from './core/bots.js';
 import { ROUND_SECONDS, ROUND_OPTIONS, POINTS } from './core/config.js';
-import { pickTwist } from './core/twists.js';
+import { matchTwist } from './core/twists.js';
 
 export const JOIN = {
   maxPlayers: 6,
@@ -53,7 +53,9 @@ export function createOnline(opts) {
   let stateAt = 0;
   let lastSpecials = '';
   let ended = '';
-  let lastTwist = '';
+  // The Gazette's twist for each round: calm in round 1, never the same twice running. A chain from the match's shared random,
+  // so every page knows the next round's twist during its intro, before the host's round data exists.
+  const twistFor = (m, round) => matchTwist((r) => m.random(`twist:${r}`).int(2147483647), round);
 
   const sync = createSync({
     myId: room.me.id,
@@ -88,10 +90,7 @@ export function createOnline(opts) {
       const k = (m.round - 1) % Math.max(1, ids.length);
       const order = ids.slice(k).concat(ids.slice(0, k));
       const seed = m.random(`seed:${m.roundId}`).int(2147483647);
-      // The Gazette's twist for the round: calm in round 1, never the same twice running.
-      if (m.round <= 1) lastTwist = '';
-      const twist = pickTwist(seed, m.round, lastTwist);
-      lastTwist = twist;
+      const twist = twistFor(m, m.round);
       return { street: streetSetting(), seed, round: m.round, ids: order, twist };
     },
     onTick(m) {
@@ -246,6 +245,10 @@ export function createOnline(opts) {
     host,
     bots,
     sync,
+    /** The twist of the round about to start (or playing): the Gazette's headline during the intro. */
+    twistAhead() {
+      return match.round > 0 ? twistFor(match, match.round) : 'quiet';
+    },
     get street() {
       return sync.R && (match.phase === 'round' || match.phase === 'intro' || match.phase === 'roundEnd') ? sync.data.street : streetSetting();
     },

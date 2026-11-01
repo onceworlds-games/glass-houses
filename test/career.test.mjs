@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { levelFor, levelNeed, rankFor, LOOKS, SLOTS, owns, lookCode, lookFromCode, looksAtLevel, nextLook, jobsFor, JOBS, dailyScore, PERSONA_LOOKS, TRICKS } from '../src/core/career.js';
+import { levelFor, levelNeed, rankFor, LOOKS, SLOTS, owns, lookCode, lookFromCode, looksAtLevel, nextLook, jobsFor, JOBS, dailyScore, PERSONA_LOOKS, TRICKS, wallOf } from '../src/core/career.js';
 import { readProfile, applyRound, wear, unseenLooks, jobsToday, streakToday, defaultProfile, BADGES } from '../src/core/progress.js';
 import { readLook } from '../src/core/net.js';
 
@@ -152,6 +152,39 @@ test('the Daily Street: a score from the round, the best of the day kept, days p
   // No ladder stars from the Daily Street.
   const w = applyRound(null, round({ daily: true, won: true, place: 1, glassLeft: 18, street: 3 }));
   assert.equal(w.stars, 0);
+});
+
+test("the neighbourhood's wall: each player's best of the day, best first, and nothing odd gets through", () => {
+  const it = (id, name, d, s) => ({ value: { d, s, st: 2 }, by: { id, name }, at: 1 });
+  const list = [
+    it('a', 'Ann', DAY, 420),
+    it('b', 'Bo', DAY, 610),
+    it('a', 'Ann', DAY, 700),
+    it('a', 'Ann', DAY, 300),
+    it('c', 'Cy', DAY - 1, 9000), // yesterday
+    it('d', 'x'.repeat(80), DAY, 1e9), // clamped, name cut
+    it('e', '', DAY, 50), // no name
+    it('f', 'Fi', DAY, NaN),
+    it('g', 'Gus', DAY, '900'),
+    { value: null, by: { id: 'h' } },
+    null,
+    'junk',
+    { value: { d: DAY, s: 10 }, by: {} }, // nobody
+  ];
+  const w = wallOf(list, DAY, 'a');
+  assert.deepEqual(
+    w.map((r) => [r.name.slice(0, 4), r.score, r.me]),
+    [
+      ['xxxx', 99999, false],
+      ['Ann', 700, true],
+      ['Bo', 610, false],
+      ['Neig', 50, false],
+    ],
+  );
+  assert.equal(w[0].name.length, 24);
+  assert.deepEqual(wallOf(undefined, DAY), []);
+  assert.deepEqual(wallOf({ length: 3 }, DAY), []);
+  assert.equal(wallOf(Array.from({ length: 50 }, (_, k) => it(`p${k}`, `P${k}`, DAY, k)), DAY).length, 20);
 });
 
 test('an old save (before levels) reads as a fresh career with its stars kept', () => {

@@ -15,7 +15,7 @@ import { createUI } from './view/ui.js';
 import { createFeel } from './view/feel.js';
 import { createCareerUI } from './view/career-ui.js';
 import { gazetteOf, dateline } from './view/words.js';
-import { makeThumbs, thumb } from './view/thumbs.js';
+import { makeThumbs, thumb, FOCUS } from './view/thumbs.js';
 import { SHAPE } from './view/particles.js';
 import { startAudio, audioContext, sound, ambience, hush } from './view/audio.js';
 import { music } from './view/music.js';
@@ -27,9 +27,9 @@ import { buildField, STREETS, STREET_COUNT } from './core/streets.js';
 import { tracePath, NO_WIND, handOf, velocityOf } from './core/physics.js';
 import { PERSONAS, personaByName, createBrain } from './core/bots.js';
 import { readProfile, applyRound, applyMatch, unlockedCount, totalStars, jobsToday, streakToday, wear, unseenLooks } from './core/progress.js';
-import { TRICKS, XP, PERSONA_LOOKS, lookCode, lookFromCode, levelFor } from './core/career.js';
+import { TRICKS, XP, PERSONA_LOOKS, lookCode, lookFromCode, levelFor, wallOf } from './core/career.js';
 import { dailyOf, dayOf } from './core/twists.js';
-import { ROUND_MS, STORE_CLOSE_MS, EYE, REPAIR_MS, ROOF_Y, ROOF_T, SEATS, TICK_MS } from './core/config.js';
+import { ROUND_MS, STORE_CLOSE_MS, EYE, REPAIR_MS, ROOF_Y, ROOF_T, SEATS, TICK_MS, STRAFE } from './core/config.js';
 
 const params = new URLSearchParams(location.search);
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -200,6 +200,8 @@ async function boot() {
   const tl = new THREE.Vector3();
   const tmp = new THREE.Vector3();
   const handTmp = new THREE.Vector3();
+  const handFace = new THREE.Vector3();
+  let strafeLean = 0;
   const stoneLast = new THREE.Vector3();
   let camStone = -1;
   // Breaks seen, for the trailer's capture to find its cuts (local only).
@@ -994,12 +996,12 @@ async function boot() {
   const DAILY_INTRO_MS = 4200;
   const DAILY_RESULTS_MS = 2600;
 
-  function startDaily() {
+  function startDaily(dayOverride) {
     if (screen !== 'title' && screen !== 'daily') return;
     startAudio();
     music.start();
     sound.paper();
-    const d = today();
+    const d = Number.isInteger(dayOverride) ? dayOverride : today();
     const D = dailyOf(d);
     const seats = lineupSeats(D.street).map((s, i) => (i === 0 ? { ...s, id: 'me', name: who.name || 'You', bot: false, persona: 'player' } : s));
     const R = createRound({
@@ -1100,6 +1102,7 @@ async function boot() {
     // The neighbourhood's wall: your best of the day goes up; everyone's plays are counted.
     const day = g.d;
     const sc = g.res.daily?.score ?? 0;
+    submit('daily-best', sc);
     const gd = ow?.data?.game;
     if (gd) {
       const after = () =>
@@ -1107,7 +1110,7 @@ async function boot() {
           .get('daily-wall')
           .then((list) => {
             if (daily !== g) return;
-            g.wall = readWall(list, day);
+            g.wall = wallOf(list, day, who.id);
             if (g.shown) showDailyResults();
           })
           .catch(() => {});
@@ -1119,20 +1122,6 @@ async function boot() {
       if (g.res.daily?.personal && sc > 0) gd.push('daily-wall', { d: day, s: sc, st: g.D.street }).then(after, after);
       else after();
     } else g.wall = [];
-  }
-
-  /** The wall's items for a day: each player's best, best first. */
-  function readWall(list, day) {
-    if (!Array.isArray(list)) return [];
-    const best = new Map();
-    for (const it of list) {
-      const v = it?.value;
-      if (!v || v.d !== day || !Number.isFinite(v.s)) continue;
-      const id = String(it.by?.id ?? '');
-      const prev = best.get(id);
-      if (!prev || v.s > prev.score) best.set(id, { name: String(it.by?.name ?? 'Neighbour').slice(0, 24), score: Math.max(0, Math.min(99999, Math.round(v.s))), me: !!who.id && id === who.id });
-    }
-    return [...best.values()].sort((a, b) => b.score - a.score);
   }
 
   function showDailyResults() {
@@ -1342,7 +1331,10 @@ async function boot() {
     }
     let roll = 0;
     if (b.stunUntil > R.now && !reduced()) roll = Math.sin(t / 70) * 0.07;
-    camera.rotation.set(pitch, yaw, roll);
+    // Lean into a strafe a little.
+    const side = b.ghost ? 0 : (b.vx * Math.cos(yaw) - b.vz * Math.sin(yaw)) / STRAFE;
+    strafeLean += ((reduced() ? 0 : -side * 0.03) - strafeLean) * Math.min(1, dt * 8);
+    camera.rotation.set(pitch, yaw, roll + strafeLean);
     camPos.copy(camera.position);
     camera.getWorldDirection(tmp);
     camLook.copy(camera.position).addScaledVector(tmp, 10);
@@ -1478,8 +1470,11 @@ async function boot() {
 
   // ------------------------------------------------------------------ the loop
   let last = performance.now();
-  function frame(now) {
+  function frame() {
     requestAnimationFrame(frame);
+    // The page's own clock, not the frame's timestamp: the two can disagree (a capture's virtual time), and everything else here
+    // (slow motion, toasts, the Daily's intro) reads this one.
+    const now = performance.now();
     const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
     last = now;
     const match = online?.match ?? null;
@@ -1621,12 +1616,18 @@ async function boot() {
       arm.group.visible = firstP && !!mine && !(mine.ghost && mine.pebbles <= 0);
       if (arm.group.visible) {
         arm.update(mine, R.now, dt, mine.ghost);
-        // A hot stone burns in your hand.
-        if (mine.hot && !mine.held && !mine.ghost && arm.stoneAt(handTmp)) {
-          handTmp.y += 0.03;
-          W.fx.parts.glowAt(handTmp.x, handTmp.y, handTmp.z, '#FF8A2A', 0.32, 0.55, SHAPE.puff, true);
-          if (Math.random() < dt * 45) {
-            W.fx.parts.emit({ x: handTmp.x + (Math.random() - 0.5) * 0.05, y: handTmp.y, z: handTmp.z + (Math.random() - 0.5) * 0.05, vx: (Math.random() - 0.5) * 0.15, vy: 0.25, vz: (Math.random() - 0.5) * 0.15, color: Math.random() < 0.5 ? '#FFB040' : '#FF6A1A', bright: 1.5, size: 0.035 + Math.random() * 0.025, grow: 0.6, life: 0.3 + Math.random() * 0.15, shape: SHAPE.flame, add: true, rise: 1.2, drag: 2 });
+        // A hot stone burns in your hand: lit from inside, a halo on the side you see, flames licking up off its top.
+        const burning = mine.hot && !mine.held && !mine.ghost && !reduced();
+        arm.setHot(burning, 0.5 + 0.5 * Math.sin(now * 0.023) * Math.sin(now * 0.0071));
+        if (burning && arm.stoneAt(handTmp)) {
+          handFace.copy(camera.position).sub(handTmp).normalize();
+          const cx = handTmp.x + handFace.x * 0.07;
+          const cy = handTmp.y + handFace.y * 0.07;
+          const cz = handTmp.z + handFace.z * 0.07;
+          W.fx.parts.glowAt(cx, cy + 0.02, cz, '#FF7A1A', 0.2, 0.42, SHAPE.puff, true);
+          if (Math.random() < dt * 70) {
+            const a = Math.random() * Math.PI * 2;
+            W.fx.parts.emit({ x: cx + Math.cos(a) * 0.04, y: cy + 0.03 + Math.random() * 0.03, z: cz + Math.sin(a) * 0.04, vx: (Math.random() - 0.5) * 0.12, vy: 0.3 + Math.random() * 0.2, vz: (Math.random() - 0.5) * 0.12, color: Math.random() < 0.5 ? '#FFC04A' : '#FF6A1A', bright: 1.6, size: 0.03 + Math.random() * 0.025, grow: 0.5, life: 0.28 + Math.random() * 0.14, shape: SHAPE.flame, add: true, rise: 1.4, drag: 2 });
           }
         }
       }
@@ -1699,14 +1700,40 @@ async function boot() {
       lookAtSmooth(tv, tl, dt, 3.5);
       return;
     }
+    if (portrait) {
+      // A phone: the sheet covers the bottom, so stand close in front of the oak and drop the aim until the lawn piece (or the
+      // glass) sits in the middle of the strip above it.
+      const sway = Math.sin(t * 0.00022) * 0.8;
+      let u = 0;
+      let y = 2.65;
+      let d = 0.6;
+      let back = 12.5;
+      let up = 0.6;
+      if (slot === 'lawn') {
+        const f = FOCUS[locker.look.lawn] ?? [0, 0.6, 4.6, 2];
+        [u, y, d] = f;
+        back = 4.6 + f[3] * 1.5;
+        up = 1.6 + f[3] * 0.5;
+      }
+      const sx = hh.cx + hh.rx * u + hh.fx * d;
+      const sy = hh.elev + y;
+      const sz = hh.cz + hh.rz * u + hh.fz * d;
+      tv.set(sx + hh.fx * back + hh.rx * sway, sy + up, sz + hh.fz * back + hh.rz * sway);
+      const free = Math.max(0.2, Math.min(0.8, career.lockerSheet / Math.max(1, stage.height)));
+      const above = Math.atan(free * Math.tan((camera.fov * Math.PI) / 360));
+      const dep = Math.min(1.35, Math.atan2(up, back) + above);
+      tl.set(sx, tv.y - back * Math.tan(dep), sz);
+      lookAtSmooth(tv, tl, dt, 3);
+      return;
+    }
     // Screen-right as seen from the green looking at the house.
     const rx = hh.fz;
     const rz = -hh.fx;
     const sway = Math.sin(t * 0.00022) * 1.5;
-    const d = portrait ? 24 : 16.5;
-    const shift = portrait ? 0 : 5.4;
-    tv.set(hh.cx + hh.fx * d + rx * (shift + 3 + sway), hh.elev + (portrait ? 7.5 : 4.6), hh.cz + hh.fz * d + rz * (shift + 3 + sway));
-    tl.set(hh.cx + hh.fx * 3.5 + rx * shift, hh.elev + (portrait ? -3.2 : 1.6), hh.cz + hh.fz * 3.5 + rz * shift);
+    const d = 16.5;
+    const shift = 5.4;
+    tv.set(hh.cx + hh.fx * d + rx * (shift + 3 + sway), hh.elev + 4.6, hh.cz + hh.fz * d + rz * (shift + 3 + sway));
+    tl.set(hh.cx + hh.fx * 3.5 + rx * shift, hh.elev + 1.6, hh.cz + hh.fz * 3.5 + rz * shift);
     lookAtSmooth(tv, tl, dt, 3);
   }
 
@@ -1841,6 +1868,8 @@ async function boot() {
     }
     // Intro and round.
     ui.show('play');
+    // Before every round of a match, the Gazette with the twist to come (every page draws the same one).
+    if (phase === 'intro') frontPage(online.twistAhead(), `Round ${match.round} · ${STREETS[online.street]?.name ?? ''}`);
     if (!sync.R || R !== sync.R) return;
     playHud(R, me, phase, now, firstP, sync.data.street, match.round);
     if (!b0(R, me)) {
@@ -1908,6 +1937,17 @@ async function boot() {
     }
   }
 
+  /** The Gazette's front page for a twist, with a kicker over the headline; the paper lands with a slap once per page. */
+  function frontPage(twist, kicker) {
+    const g = gazetteOf(twist);
+    const key = `${kicker}|${twist}`;
+    if (key !== paperKey) {
+      paperKey = key;
+      sound.paper();
+    }
+    feel.gazette({ date: dateline(today()), headline: g.head, line: g.line, kicker });
+  }
+
   /** The HUD in a round (the match's or the Daily Street's): clock, wind, plates, your plate, the twist, hints, the attacker. */
   function playHud(R, me, phase, now, firstP, street, roundNo) {
     const elapsed = phase === 'round' ? R.now : 0;
@@ -1933,17 +1973,13 @@ async function boot() {
     ui.keyhint(active && !touch && !ui.cardOpen ? (input.locked ? 'Esc' : input.lockFailed ? null : 'Click') : null);
 
     // The Gazette before the round: its twist, the street and the round. Then the twist pinned under the wind.
-    const g = gazetteOf(R.twist);
+    // (A match's intro shows its Gazette from hud(): the round's data isn't there yet.)
+    const twist = R.twist;
+    const g = gazetteOf(twist);
     if (phase === 'intro') {
-      const kicker = roundNo ? `Round ${roundNo} · ${STREETS[street].name}` : `The Daily Street · ${STREETS[street].name}`;
-      const key = `${kicker}|${R.twist}`;
-      if (key !== paperKey) {
-        paperKey = key;
-        sound.paper();
-      }
-      feel.gazette({ date: dateline(today()), headline: g.head, line: g.line, kicker });
+      if (!roundNo) frontPage(twist, `The Daily Street · ${STREETS[street].name}`);
     } else feel.gazette(null);
-    if (phase === 'round' && R.twist !== 'quiet') {
+    if (phase === 'round' && twist !== 'quiet') {
       feel.chip({ name: g.chip, line: g.tip });
       feel.chipAt(ui.windFoot + 10);
     } else feel.chip(null);
@@ -2012,8 +2048,31 @@ async function boot() {
       get daily() {
         return daily;
       },
+      /** A fresh Daily Street (from the title or over the one running); `day`: another day's. */
+      playDaily(day) {
+        if (screen === 'daily') {
+          screen = 'title';
+          daily = null;
+        }
+        startDaily(day);
+      },
+      /** The Daily's round run on at once to `ms` (a take that starts late in a round). */
+      dailySkip(ms) {
+        const g = daily;
+        if (!g || g.phase === 'end') return;
+        g.phase = 'round';
+        while (g.R.now < ms && g.R.alive() > 1) {
+          g.R.stepTick();
+          g.R.events.length = 0;
+        }
+        g.ms = g.R.now;
+        W.sweep();
+      },
       get screen() {
         return screen;
+      },
+      get arm() {
+        return arm;
       },
       /** Draw calls in the last frame (shadows included). */
       get calls() {

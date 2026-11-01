@@ -226,12 +226,14 @@ export function createCareerUI(root, titleEl, opts = {}) {
       xp.classList.toggle('hidden', !res);
       if (!res) return;
       xp.innerHTML = '';
-      el('div', 'xh mounted', xp, 'XP');
-      const list = el('div', 'lines', xp);
-      const lines = res.xp.lines.slice(0, 9);
-      if (res.xp.lines.length > 9) {
-        const rest = res.xp.lines.slice(8).reduce((a, l) => a + l.xp, 0);
-        lines[8] = { label: 'And more', xp: rest };
+      // A till receipt from the hardware store.
+      const rc = el('div', 'rc', xp);
+      el('div', 'xh', rc, 'XP');
+      const list = el('div', 'lines', rc);
+      const lines = res.xp.lines.slice(0, 12);
+      if (res.xp.lines.length > 12) {
+        const rest = res.xp.lines.slice(11).reduce((a, l) => a + l.xp, 0);
+        lines[11] = { label: 'And more', xp: rest };
       }
       lines.forEach((l, k) => {
         const r = el('div', 'ln', list);
@@ -240,13 +242,13 @@ export function createCareerUI(root, titleEl, opts = {}) {
         r.style.animationDelay = `${0.25 + k * 0.16}s`;
         xpTimers.push(setTimeout(() => opts.sound?.tick?.(k), 250 + k * 160));
       });
-      const tot = el('div', 'tot', xp);
+      const tot = el('div', 'tot', rc);
       tot.style.animationDelay = `${0.35 + lines.length * 0.16}s`;
       el('span', '', tot).textContent = 'Total';
       el('b', '', tot).textContent = `+${num(res.xp.total)} XP`;
       const before = levelFor(Math.max(0, profileXp - res.xp.total));
       const after = levelFor(profileXp);
-      const lv = el('div', 'lv', xp);
+      const lv = el('div', 'lv', rc);
       const badge = el('span', 'badge', lv, String(before.level));
       const b2 = el('div', 'bar', lv, '<i></i>');
       const bi = b2.querySelector('i');
@@ -269,7 +271,7 @@ export function createCareerUI(root, titleEl, opts = {}) {
             void bi.offsetWidth;
             bi.style.transition = 'width 0.6s ease-out';
             bi.style.width = `${Math.round((after.into / after.need) * 100)}%`;
-            const upEl = el('div', 'up', xp);
+            const upEl = el('div', 'up', rc);
             el('div', 'w', upEl).textContent = `Level ${after.level}`;
             el('div', 'r', upEl).textContent = rankFor(after.level) !== rankFor(before.level) ? `New rank: ${rankFor(after.level)}` : '';
             const looks = (res.looks ?? []).map((k) => {
@@ -283,12 +285,12 @@ export function createCareerUI(root, titleEl, opts = {}) {
       }
       const done = (res.jobs ?? []).filter((j) => j.now);
       if (done.length) {
-        const jb = el('div', 'jobsdone', xp);
+        const jb = el('div', 'jobsdone', rc);
         jb.style.animationDelay = `${(start + (up ? 1300 : 700)) / 1000}s`;
         for (const j of done) el('div', '', jb).textContent = `Job done: ${j.text}`;
       }
       if (res.streak?.grew && res.streak.n > 1) {
-        const s = el('div', 'streakline', xp, `${flameSvg()}<span></span>`);
+        const s = el('div', 'streakline', rc, `${flameSvg()}<span></span>`);
         s.querySelector('span').textContent = `${res.streak.n} days in a row`;
         s.style.animationDelay = `${(start + 300) / 1000}s`;
       }
@@ -322,7 +324,7 @@ export function createCareerUI(root, titleEl, opts = {}) {
           el('span', 'n', r).textContent = w.name;
           el('span', 's', r).textContent = num(w.score);
         });
-      if (d.plays > 0) el('div', 'plays', paper).textContent = `${num(d.plays)} plays today`;
+      if (d.plays > 0) el('div', 'plays', paper).textContent = `${num(d.plays)} ${d.plays === 1 ? 'play' : 'plays'} today`;
       const row = el('div', 'btns', paper);
       btn('again', row, 'Again', () => opts.onDailyAgain?.());
       btn('back main', row, 'Done', () => opts.onDailyBack?.());

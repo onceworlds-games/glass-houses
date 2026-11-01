@@ -50,11 +50,12 @@ the glass house behind you, every house's health is its house number, and you ch
 
 | Time | Screen | Words |
 |---|---|---|
-| 0 s | **Title.** The street alive: a slow crane shot round the green while six bot neighbours play a real round; when a house falls the camera cuts to it. "Glass Houses" in two lines of big mounted letters top left, one tangerine **Play** door with a brass knob bottom centre. The platform's Ready strip is hidden here (`room.hideLobby(true)`). | none |
+| 0 s | **Title.** The street alive: a slow crane shot round the green while six bot neighbours play a real round; when a house falls the camera cuts to it. "Glass Houses" in two lines of big mounted letters top left; top right your level on a starburst, your rank and XP bar, your day streak's flame, and today's three jobs on a clipboard. One tangerine **Play** door with a brass knob bottom centre, the **Locker** on its left, the **Daily Street** (today's street and twist, your best) on its right. The platform's Ready strip is hidden here (`room.hideLobby(true)`). | none |
 | ~2 s | Play (click, tap, Space or Enter) starts the sound. **The lobby:** the camera sits behind and above your house, looking over your lawn at the green. Every lawn has a real-estate sign with a name (yours with a big arrow and your colour). At the top: the street plate (alone: the ladder of eight street blades, padlocks on the locked ones) and the Rounds plates (1, 3, 5). | none |
 | ~4 s | The platform's Ready bar at the bottom. One tap. With others: everyone readies (public), or the host starts (private). If a match starts while you're still on the title, the game leaves the title by itself. | the platform's "Ready" |
 | ~5 s | **Our own 3-2-1** (`ownCountdown: true`): big numerals drop with a clack each while the camera comes down from above onto your lawn. | "3", "2", "1" |
-| 8 s | **Round 1.** First person, a stone in your hand, the green ahead, a number plate over every house. | "Break their glass" (your first 3 rounds) |
+| ~5 s | While the camera comes down, **the Gazette's front page** drops in: the round's twist as a headline ("Heatwave", "Hail on the Way") with one line under it; then it shrinks to a chip under the clock. | the headline |
+| 8 s | **Round 1.** First person, your own stone in your hand, the green ahead, a number plate over every house. | "Break their glass" (your first 3 rounds) |
 | 10 s | Hold: the dotted arc grows from your hand and lands on what you aim at (a cross on a wall, a ring on the ground). | "Hold to wind up" (touch: "Hold Throw") until the first hold; then "Let go to throw", once |
 | 11 s | First throw: whoosh, the stone arcs, a pane bursts, the number over that house flips 20 to 19. | none |
 | ~16 s | A stone whooshes past your head (alone on the first two streets until you have a star there, bots leave your house alone for the first 6 s). | none |
@@ -145,6 +146,62 @@ throws at your house for the first 6 s, then at most one bot at a time until 0:3
 - **Points per round: 3 for first, 2 for second, 1 for third.** A match is 1, 3 or 5 rounds (the host picks; default 3). Most
   points wins the match; a tie on points goes to more round wins, then to more panes broken.
 
+### Heat: hot stones
+
+- **Three glass hits in a row** (stones that break or crack glass, any house) heat your next stone; two in a row on a
+  Heatwave. The flames by your stones fill one by one; at three the plate says HOT, the screen's edges glow, your hand burns.
+- **A hot stone breaks two panes**: the one it hits and the one above or below it. It flies on fire with a smoke trail and a
+  roar, and a hot stone through double glazing goes straight through.
+- **A miss cools you** (back to no flames); so does a bonk, which also puts out a hot stone in hand. The streak is visible to
+  everyone (the hand on fire, the trail), so a hot neighbour draws fire.
+- Knocking a hot stone out of the air is a **Firefighter**.
+
+### Knockouts and salvage
+
+- Breaking a house's last pane is a **Knockout**: a KNOCKOUT stamp, a slow-motion moment (0.5 s) with the lens punching in,
+  the house's lights go out.
+- **Salvage:** the knocker's own house gets its first broken pane back (or, with none broken, a hot stone). Finishing a
+  house is always worth more than chipping at the leader.
+
+### Trick shots
+
+A break can be worth naming. Each one is stamped across the screen for the thrower (with its XP), and shown to everyone else
+in a feed at the left:
+
+| Trick | When | XP |
+|---|---|---|
+| Knockout | Your break finishes a house | 60 |
+| Long Shot | Thrown from 38 m or more | 40 |
+| Rainbow | The stone rose 7 m or more above where it left the hand | 35 |
+| Interception | You knocked a stone out of the air | 50 |
+| Firefighter | ...and it was a hot one | 40 |
+| Payback | You broke the glass of whoever broke yours in the last 6 s | 25 |
+| Last Stand | A break while your own house is on 2 panes or fewer | 40 |
+| Buzzer Beater | A break in the last 6 s of a round | 50 |
+| Golden | You broke a golden pane | 30 |
+| From the Grave | A ghost's pebble broke a pane | 30 |
+| Skipper | A gnome skipped off the ground and still broke glass | 40 |
+| On the Run | Thrown while moving at 3 m/s or more | 25 |
+
+### The Gazette: a twist every round
+
+Every round has one twist (`twists.js`), a chain drawn from the match's shared random (`match.random`), so every page knows
+the next round's twist during its intro, before the host's round data exists. It's shown as the Gazette's headline before the
+round and a chip under the clock during it; the host still sends it with the round's data. Round 1 of a match draws a calm one (Quiet day, Golden panes, Sale, Bricks,
+Gnomes); later rounds draw from all of them, never the same twice running.
+
+| Twist | Headline | Rule |
+|---|---|---|
+| Quiet | All Quiet on the Street | None |
+| Gale | Gale Warning! | Wind ×2.1, from round 1 |
+| Hail | Hail on the Way | Three showers (38, 82 and 126 s in), each cracking 3 panes on every standing house; 2.5 s of warning |
+| Bricks | Brickyard Spill! | Every special is a brick, one every 12-16 s from 0:20 |
+| Gnomes | Gnomes Half Price | Every special is a gnome, one every 12-16 s from 0:20 |
+| Double glazing | Double Glazing Fitted | A stone only cracks a pane first; a hot stone goes straight through |
+| Golden panes | Gold Leaf Windows | Three golden panes on every house (the same ones); breaking one refills your stones and heats the next |
+| Sale | Hardware Sale! | Repairs take 0.6 as long; the store stays open 30 s longer (till 1:00 on the clock) |
+| Heatwave | Heatwave | Two hits in a row make a hot stone |
+
 ## The core loop and where mastery comes from
 
 Every two seconds a decision: who to throw at, how hard, how high, whether to move, whether to repair.
@@ -159,6 +216,8 @@ Every two seconds a decision: who to throw at, how hard, how high, whether to mo
 | Intercepts | Never | Knocks down stones aimed at their house, especially slow lobs and bricks |
 | Bonks | Never aims at people | Bonks repairers, leads strafing players, poofs a ghost that's cracking their glass |
 | Movement | Stands still | Strafes to find angles around the oak and fountain, races neighbours to specials |
+| Heat | Throws anywhere, loses the streak on a miss | Keeps the streak on safe, close panes, then spends the hot stone where two panes count: the leader, or a house it finishes |
+| Twists | Plays every round the same | Repairs cracks before the hail, saves a hot stone for double glazing, hunts the golden panes, throws on a Gale's wind |
 
 Fewer panes are harder to hit, an out player keeps throwing as a ghost, and the store's closing forces the end: a player behind
 on glass is never out of it until the last pane.
@@ -282,11 +341,46 @@ Each street has a lineup of five (Palm Court: Walt, Ray, Rosa, Bev, the Twins; M
 
 ## Progression and reasons to come back
 
-- **Stars** on the ladder (24), saved in `ow.save` (`profile`: `{ stars: [8], panes, roundsWon, matchesWon, intercepts,
-  firstRound, hints }`), written on events (a round's end, a badge), never per frame.
-- **Personal bests** on the title (stars x/24, rounds won) and on the results (your panes broken this match against your best).
-- **Leaderboards:** `rounds-won` (total round wins), `panes` (total panes broken), `stars` (ladder stars).
-- **Badges** (10):
+Everything is saved with `ow.save` (`profile`), written at a round's end, never per frame (`progress.js`, `career.js`).
+
+**Every round pays XP** (a receipt after the round, line by line, the level bar filling):
+
+| Line | XP |
+|---|---|
+| Played a round | 40 |
+| Each pane broken | 8 (+4 more when it was hot) |
+| Each trick shot | its own (above) |
+| Salvage | 20 |
+| Place | 160 / 100 / 60, then 30 for taking part |
+| Glass kept (the house that stands) | 4 per pane |
+| A job done / all three | 150 / 250 more |
+| The first round of a day | 40 per day of the streak (up to 7) |
+| The Daily Street | 120 |
+
+- **Levels:** the first takes 400 XP, each one after it 250 more (a round is worth 250-600), up to 99. Ranks come with them:
+  New in Town (1), Window Shopper (3), Pane in the Neck (6), Rock Hound (10), Stone Skipper (15), Neighbourhood Menace (20),
+  Block Captain (25), Street Legend (30), Glass Baron (40), Mayor of the Street (50).
+- **Looks, earned by playing** (the Locker; every neighbour on the street sees them): what you throw (river stone, baseball,
+  geode, lemon, pine cone, lucky die, snow globe, crystal, meteorite, golden egg; a tennis ball for 3 Daily Streets), its
+  trail (streak, dust, ribbon, sparks, confetti, bubbles, rainbow, comet; hearts for a 7-day streak, newsprint for 10 Daily
+  Streets), your glass's tint (clear, sea glass, amber, rose, cobalt, smoked, one-way mirror, stained glass; mint for a 3-day
+  streak) and your lawn (flamingos, a barbecue going, sun loungers, tiki torches, the dog, a gnome choir that sings, a classic
+  car, a fountain, a golden statue of you mid-throw). A new one roughly every two levels to 50. A look is four small numbers
+  in presence, so it costs nothing on the wire. The bot neighbours wear their own.
+- **The Locker:** a sheet of tiles over your own house, lit and turned pictures of every stone and lawn; tap one to try it on
+  live (the house behind shows it: a thrown stone with its trail, the glass tinted, the lawn dressed), locked ones say what
+  unlocks them.
+- **Three daily jobs**, the same for everyone each day ("Break 50 panes", "Land 3 trick shots", "Win a pane back with a
+  knockout", "Play the Daily Street"...), on the title with their bars; 150 XP each, 250 more for all three.
+- **The day streak:** play on consecutive days; the flame on the title counts them, the first round of a day pays for it.
+- **The Daily Street:** one street, one seed, one twist a day, the same for everyone (`dailyOf(day)`), played alone against
+  its five neighbours. Scored: 10 per pane, 60 per knockout, each trick's XP, 600 / 300 / 150 for first, second, third, and
+  15 per pane kept if your house stands. Your best of the day goes on **the neighbourhood's wall** (`ow.data` list
+  `daily-wall`, each player's best shown), with how many plays the street had today (`daily-plays`, a daily counter). The
+  title also counts the panes everyone broke today (`panes-today`).
+- **Ladder stars** (24) on the solo streets, as before.
+- **Leaderboards:** `rounds-won`, `panes`, `stars`, `level`, `knockouts`, `daily-best` (your best Daily Street score).
+- **Badges** (20):
 
 | id | Name | Earned |
 |---|---|---|
@@ -300,6 +394,16 @@ Each street has a lineup of five (Palm Court: Walt, Ray, Rosa, Bev, the Twins; M
 | `fore` | Fore! | Bonk a neighbour |
 | `house-proud` | House Proud | Win a match |
 | `the-whole-street` | The Whole Street | Win a round on all eight streets |
+| `hot-hands` | Hot Hands | Throw a hot stone |
+| `firefighter` | Firefighter | Knock a hot stone out of the air |
+| `salvage` | Salvage | Win a pane back by knocking a house out |
+| `long-shot` | Long Shot | Break a pane from right across the street |
+| `daily-paper` | Daily Paper | Play the Daily Street |
+| `job-done` | Job Done | Finish all three of a day's jobs |
+| `regular` | Regular | Play three days in a row |
+| `neighbourhood-watch` | Neighbourhood Watch | Play seven days in a row |
+| `rock-hound` | Rock Hound | Reach level 10 |
+| `street-legend` | Street Legend | Reach level 30 |
 
 ## Balance and timing
 
@@ -341,9 +445,16 @@ All big words and numbers are **house numerals**: cream or ink letters on enamel
 offset shadow as if mounted on a wall in a low sun. No dark boxes behind HUD items, no glassy panels.
 
 1. **Title.** The 3D attract round fills the screen (a crane shot that orbits the green, cutting to a close shot when a house
-   falls). "Glass Houses" in two lines of big mounted letters, top left. Bottom centre, one tall **Play** door in tangerine
-   with a brass knob (Space or Enter on desktop). A small brass plate under it: your stars ("12 / 24") once you have any. The
+   falls). "Glass Houses" in two lines of big mounted letters, top left. Top right, your career: level on a gold starburst,
+   rank, XP bar, the day streak's flame; under it today's jobs on a clipboard and the panes the whole street broke today.
+   Bottom centre, one tall **Play** door in tangerine with a brass knob (Space or Enter on desktop), the **Locker** door on its
+   left ("New" when a look unlocked) and the **Daily Street** on its right (today's street, twist and your best). The
    platform's Ready strip is hidden on the title.
+   - **Locker:** the camera behind your own lawn, tabs for Stone, Trail, Glass and Lawn, a tile per look; your house tries each
+     one on (a stone thrown every two seconds with the camera chasing it, the glass tinted, the lawn dressed).
+   - **Daily Street:** the Gazette (the day's street and twist), the camera down onto your lawn, a round against the street's
+     five. Out early: watch as a ghost or skip to the end. Then the receipt and the Daily Street's page: your score, your best,
+     the wall of the day's best, Again or Done. Esc pauses it.
 2. **Lobby.** Behind and above your house, looking across the green (higher and further back in portrait). On each lawn, a
    real-estate sign on a post: the owner's symbol and name (a person or a bot neighbour), a key for the host, a check when
    ready; yours has a big arrow in your colour. Top centre: the **street** (alone: the ladder, eight green street-name blades
@@ -365,6 +476,9 @@ offset shadow as if mounted on a wall in a low sun. No dark boxes behind HUD ite
      bottom.
    - Centre: a small dot reticle; while winding up, the dotted arc and its landing ring or cross.
    - Hints: 2-5 words in mounted letters, low centre, once each.
+   - Under the clock, the twist's chip. Over the middle: trick stamps, the KNOCKOUT stamp, the hail warning. Off the glass you
+     break: "+8" (gold "+12" when hot). By your stones: three flames for the heat. At the left: the neighbours' tricks.
+   - Hit: cracks grow in from the screen's edge on the side the stone came from.
    - The edge arrow pointing at whoever just broke your glass, for 1.5 s, and a white flash at the edges.
    - Esc key hint, small, top right, while the mouse is locked; "Click" when it isn't.
    - On phones everything moves around `ow.ui.reserved` (the platform's menu, stick and buttons).
@@ -373,7 +487,9 @@ offset shadow as if mounted on a wall in a low sun. No dark boxes behind HUD ite
 6. **Round end** (6 s). A third-person shot pushing in on the last house standing, shards settling everywhere else. A plate:
    "Your house stands", "Walt's house stands" or "A tie".
 7. **Results** (20 s). The winner's house; "You win" or "Rosa wins"; the standings board (place, symbol, name, panes broken,
-   points). Alone: the stars you won are kept, and the next street is picked for you in the lobby.
+   points). Alone: the stars you won are kept, and the next street is picked for you in the lobby. After every round, on the
+   left: **the receipt**, the XP line by line with a tick each, the total, the level bar filling (a level up stamps "Level 7",
+   a new rank, the looks it unlocked), the jobs done and the streak.
 8. **Watching** (latecomer): a ghost's view over the green; "Next round" (or "Next match" when every house has a person).
 9. **Esc card:** Resume (and Pause for a private server's host or a player alone). Solid plate in the street's colours, one
    column of large buttons.
@@ -400,36 +516,60 @@ geometry with good lighting, never toy-like.
 Owner colours with symbols (shape for colour-blind players): tangerine `#F08A24` starburst, mustard `#E5B83B` boomerang,
 turquoise `#2BB7B3` ring, coral `#E8645A` diamond, cobalt `#3563B8` triangle, plum `#8A4F9E` square.
 
-**Fonts:** Josefin Sans 700 (display: the title, the house numerals, plates) and Jost 500/700 (labels, names). Self-hosted with
-`@fontsource`, latin subset, only those weights. Sentence case; no letter-spaced capitals except the hardware store's neon.
+**Fonts:** Josefin Sans 700 (display: the title, the house numerals, plates), Jost 500/700 (labels, names) and Abril Fatface
+(the Gazette, trick stamps, KNOCKOUT, the receipt's heading and the Daily Street's page). Self-hosted with `@fontsource`,
+latin subset, only those weights. Sentence case; no letter-spaced capitals except the hardware store's neon and the
+Gazette's kicker.
 
 **The signature: the house numbers.** Every house's pane count is its house number, in big mid-century numerals on its
 breeze-block mailbox wall. The same numerals, on the same enamel plates with the same low-sun shadow, are every number in the
 game: the HUD strip, your plate, the clock, the countdown, the places on the results.
 
-**Glass that reads as glass:** the 120 panes are one InstancedMesh with a drawn pane texture: a cool tint darker at the foot,
-two bright diagonal streaks and a lit top and left edge, more opaque where it shines. On top, a reflective standard material
-and an environment map baked once per street (PMREM of the sky with its sun), so panes also flash gold at the right angle.
-The blending adds what the glass reflects and dims what is behind it, so the lit room behind reads through. It reads on low
-quality too: the streaks are in the texture, not in the lighting. A broken pane is an empty frame with jagged teeth left in
-it (three tooth shapes, instanced); a cracked pane gets a star-crack decal.
+**The houses:** six mid-century builds, each its own (a butterfly roof, a Swiss Miss gable, Neutra beams, a folded plate, a
+chimney, a clerestory), walls in stucco, flagstone, redwood or brick, a pastel front door, the breeze-block mailbox wall with
+the number, a carport with a finned sedan, a kidney pool or a cactus garden. Behind the glass a double-height living room with a
+loft, furnished for 1962 (low sofas, the lounge chair, a walnut credenza, a console TV, an arc lamp, a sputnik light, rugs and
+paintings), lamps that go out when the house does. Roofs, chimneys, carports and entry wings are solid in the rules, so the
+stones and the aiming arc meet what is drawn.
 
-**Shattering is the star:** each break throws 24-38 triangular shards (one InstancedMesh)
-with simple physics: gravity, spin, a bounce off the floor or plinth, then they settle and stay, glinting, until the round
-ends (oldest recycled; 700 on high, 360 medium, 160 low). By the end of a round every house sits in a glittering pile. A burst of glints on the hit, a puff of
-dust on the plinth.
+**Glass that reads as glass:** the 120 panes are one InstancedMesh: a cool tint with soft streaks, fresnel, reflections of the
+painted sky baked once per street, so every pane carries the evening against the warm room behind. Each player's tint (their
+look) colours their own front. A cracked pane gets a star crack; a broken pane leaves bright fresh edges, jagged teeth and a dark
+rim, and the room shows through.
 
-**Light and camera:** a low warm sun (`#FFC07A`, 12° high) with soft shadows (a tight shadow camera over the street; map size
-by `ow.settings.quality`: none, 1024, 2048), a hemisphere light (peach sky, olive bounce), sRGB output, ACES tone mapping,
-peach distance fog blended into the sky, distant mesas in the haze. First person at 1.6 m, FOV 66° vertical (in portrait,
-wide enough for a 78° horizontal view). Camera shake from a trauma value (`shake = trauma²`, smooth noise) on bonks, nearby
-shatters and your house falling; none with reduced motion. No bloom. A computer drawing without a graphics chip (a software
-renderer) gets low quality and pixel ratio 1 whatever the setting says.
+**Shattering is the star:** a break throws slivers that flash as they leave, big pieces that slide out and burst again below,
+glitter hanging in the air and a puff of dust on the plinth; the shards settle into glittering piles on the patio that grow
+until the round is swept (a capped pool by quality). A hot break adds embers and fire, a knockout a ring of shards and
+confetti and the lights going out. Particles are one pool of camera-facing quads in two instanced meshes (soft and glowing),
+each a shape from a small painted sheet: puffs, sparks, flames, hearts, confetti, newspaper scraps, bubbles, stars, smoke,
+rings, hailstones.
 
-**Players and bots:** stylised low-poly people in their house colour; the bot neighbours dressed as above (Walt's flat cap,
-Ray's and Rosa's aprons, Bev's pink robe, Sunny's skates and visor, Lindqvist's sun hat, Chad's headband and bare arms, the
-Twins as two kids). Names live on the house plates and lawn signs, not over heads. Your first-person arm has a sleeve in your
-colour and holds the stone, brick or gnome; it pulls back as you wind up and snaps forward on release.
+**What you throw, and its trail:** each player's chosen stone (eleven, all a stone's size) with a ribbon trail behind it built
+every frame from where it has been, facing the camera, thinning to the tail: a plain streak, dust, a ribbon, sparks,
+confetti, bubbles, a rainbow, a comet, hearts or newsprint. Hot stones burn with a fire ribbon and smoke.
+
+**Lawns:** what a player keeps on their lawn, at its edges: flamingos, a barbecue going, loungers under an umbrella, tiki
+torches, the dog (a rigged one: it wanders, eats, jumps when the glass goes and lies down when the house is out), a gnome choir
+that sings, a classic car, a fountain, a golden statue of its owner mid-throw.
+
+**Light and camera:** a low warm sun with soft shadows (map size by quality), a hemisphere light, ACES tone mapping, distance
+fog into the painted sky, mesas in the haze. Medium quality adds a bloom on what shines (fire, glints, the sun) and a
+warm-cool grade; high adds ambient occlusion. First person at 1.6 m, FOV 66° vertical. A computer drawing without a graphics
+chip gets low quality.
+
+**Feel:** the camera shakes from a trauma value (`shake = trauma²`) on bonks, nearby shatters and your house falling; the lens
+kicks out a few degrees on every throw; a knockout of yours slows the world to 0.3 for half a second while the lens punches
+in. Your break: the reticle cracks into a star, "+8" jumps off the glass, a ding (rising with the streak). Your glass broken:
+cracks grow in from the screen's edge on the side it came from, with a red rim. Hot stone in hand: the screen's edges glow
+orange and the hand burns. None of the shake, slow motion or cracks with reduced motion.
+
+**Players and bots:** rigged low-poly bodies (a man and a woman, CC0) in their house colour, each neighbour dressed as
+themselves with things riding the bones (Walt's flat cap, Ray's apron and spatula, Bev's curlers and mug, Sunny's skates and
+visor, Lindqvist's sun hat, Chad's headband, the Twins as two kids). Walks, runs and strafes crossfade by speed; the throw is
+laid over the top as its own motion (cock, draw back, snap, follow through); a bonk flinches with stars; a body falls where it
+stands when its house goes and a sheet ghost rises out of it. Names live on the house plates and lawn signs, not over heads.
+Your first-person arm is cut from the same body: a sleeve in your colour, your own stone in a closing hand, a draw you can see
+and a release that snaps through.
 
 **HUD in the world's language:** enamel house-number plates, a starburst clock, real stones for ammo, street-name blades for
 streets, real-estate signs in the lobby, the hardware store's neon for the 1:30 mark.
@@ -458,6 +598,15 @@ All synthesized with Web Audio; distance attenuates and low-passes far sounds.
 | A house falls | A cascade of shatters and a descending vibraphone motif |
 | Round win / match win | Vibraphone and muted brass stabs; a longer fanfare for the match |
 | UI | Plate clicks; the porch-light switch for Ready |
+| Heat | A rising chime per flame; at HOT a whump and a roar that settles into crackle; a hot stone roars past; heat lost hisses and falls |
+| Your break | A bright ding in the ear, higher the longer your streak |
+| Trick shot | A quick rising run (longer for more tricks); a golden pane rings coins |
+| Knockout | A brass stab and a cymbal over a low boom; yours is the full three-stab fanfare |
+| Salvage | Four rising bells |
+| Hail | A rattle of ice ticks on everything for the shower's length |
+| The Gazette | A slap and a rustle as the paper lands |
+| The receipt | A till tick per line, rising; a level up plays a fanfare |
+| The dog | Two barks across the lawns when the glass goes |
 | Ambience | Wind (by strength), the fountain, golden-hour birds (crickets at night, muffled hush in snow) |
 
 **Music:** a cool lounge-jazz loop from a small sequencer: walking upright bass (a plucked triangle), brushed snare and ride
@@ -479,16 +628,14 @@ Every picture is drawn by the game's own renderer from a real round frozen at it
 - **Icon**: a whole glass front at golden hour with two panes bursting and a stone flying at it from just past the lens. No
   text.
 - **Badges**: a bold symbol for each on a coloured disc (a stone, a cracked pane, a house, a half-full pane, a clean pane with
-  sparkles, two clacking stones, a gnome, a head with stars, a sunburst with a check, eight panes round a lawn).
-- **Trailer** (`store/trailer.mp4`, 21 s, 1280×720, the game's own sound and music): six shots of real autoplay rounds, hard
-  cuts. 0-1 s riding behind a stone into a neighbour's glass front, its number dropping 16, 15, 14 (the goal); 1-6 s first
-  person on Palm Court, stone in hand, throwing across the green while the numbers fall; 6-9 s riding a lob high over the
-  street and down onto a house; 9-11 s late on Sunset Loop, the dotted arc and a stone going in; 11-17 s the last houses, then
-  "Your house stands"; 17-21 s "Glass Houses" on the title screen while the win's music plays on. Captured with `vcap` from a
-  local build served on its own (a room of one, so the clock stays the page's own). The capture hooks are local only:
-  `?autoplay=1` (this page plays itself with the bot brain), `?hush=1` (no sound until `__glass.hush(false)`, so a take can
-  start late in a round without a long soundtrack to render) and `window.__glass` (the camera: first person, `chase`,
-  `orbit`, `weak` or `stone`; the round clock; standing houses; breaks seen; draw calls).
+  sparkles, two clacking stones, a gnome, a head with stars, a sunburst with a check, eight panes round a lawn; a stone on
+  fire, a hot stone knocked down, a pane with a curved arrow, a dotted arc across to a cracked pane, the Gazette, a clipboard
+  of ticks, calendar pages for 3 and 7 days, a level starburst, a crowned one).
+- **Trailer** (`store/trailer.mp4`): see the end of this section once cut. Captured with `vcap` from a local build served
+  on its own. The capture hooks are local only: `?autoplay=1` (this page plays itself with the bot brain), `?daily=auto` (the
+  Daily Street plays itself), `?hush=1` (no sound until `__glass.hush(false)`) and `window.__glass` (the camera: first
+  person, `chase`, `orbit`, `weak` or `stone`; `playDaily()`, `dailySkip(ms)`; the round clock; standing houses; breaks
+  seen; draw calls). The loop reads `performance.now()`, so a capture's virtual time drives everything.
 
 ## Originality check
 
@@ -535,20 +682,24 @@ street with pebbles. It is first person, in a sunlit mid-century street, not a 2
 
 ## How it's built
 
-Vite + three.js, `@fontsource/josefin-sans` and `@fontsource/jost`, the SDK (`@onceworlds/sdk` with its match, host and bots
+Vite + three.js, `@fontsource/josefin-sans`, `@fontsource/jost` and `@fontsource/abril-fatface`, the SDK (`@onceworlds/sdk` with its match, host and bots
 helpers); `"dir": "dist"`, `base: './'`.
 
 - Pure modules in `src/core` (no page, no three.js; tested in node): `config.js` (every number), `rng.js`, `streets.js` (the
   eight layouts), `physics.js` (stone paths, wind, intercepts, facade and body hits, the aim solver), `round.js` (a round:
   panes, throws, specials, repair, the store, ghosts, eliminations, ranking), `bots.js` (brains and personalities), `sim.js`
   (a headless round: the title's attract round, autoplay and the balance tests), `sync.js` (one page's side of a round in a
-  match: who decides what, presence, host state), `net.js` (checks on everything read from the network), `progress.js`
-  (stars, unlocks, badges).
+  match: who decides what, presence, host state), `net.js` (checks on everything read from the network), `twists.js`
+  (the Gazette's twists and the Daily Street of each day), `career.js` (tricks, XP, levels, ranks, looks, jobs, the Daily
+  score), `progress.js` (the saved profile: stars, XP, looks, jobs, streak, badges).
 - `src/online.js`: the join, the lobby settings, `createMatch`, host state, the special claim, presence.
-- Page modules in `src/view`: `stage.js` (renderer, sky, light, environment map), `build.js` (merged static geometry),
-  `street.js` (the street), `glass.js` (panes, cracks, teeth, shards), `people.js` (figures, the first-person arm), `fx.js`
-  (stones and trails, the arc, puffs, leaves, specials), `world.js` (all of it drawn from a round), `ui.js` (every screen's
-  DOM), `input.js`, `audio.js`, `music.js`, `palette.js`, `poster.js`.
+- Page modules in `src/view`: `stage.js` (renderer, sky, light, post), `sky.js`, `build.js` (merged static geometry),
+  `street.js`, `props.js`, `textures.js`, `materials.js` (the street), `glass.js` (panes, cracks, teeth, shards), `rig.js` and
+  `people.js` (the rigged neighbours, the first-person arm), `lawn.js` (lawn looks, the dog), `throwables.js` (what is thrown),
+  `ribbons.js` (trails), `particles.js`, `fx.js` (everything in the air), `world.js` (all of it drawn from a round), `ui.js`
+  (the HUD and screens), `feel.js` (stamps, numbers, edge cracks, the Gazette), `career-ui.js` (title career, Locker, receipt,
+  Daily results), `thumbs.js` (the Locker's pictures), `words.js`, `input.js`, `audio.js`, `music.js`, `palette.js`,
+  `poster.js`.
 - `src/main.js`: join first, the title, lobby and rounds, cameras, events into sound and shards, the HUD.
 - Static geometry is merged per material; panes, teeth, cracks, shards, stones, trails, arc dots and puffs are instanced, so a
   frame is about 80-110 draw calls with shadows (measured on high quality at 1280×720, first person and from above).

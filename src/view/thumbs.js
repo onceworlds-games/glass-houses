@@ -11,7 +11,7 @@ const cache = new Map();
 let pending = null;
 
 // Where each lawn's piece stands (x, y, z in a plain frame: u, height, d) and how much round it to show.
-const FOCUS = {
+export const FOCUS = {
   flamingos: [-7.3, 0.7, 4.7, 1.5],
   grill: [7.0, 0.6, 4.4, 1.15],
   loungers: [-6.7, 0.6, 4.1, 1.7],

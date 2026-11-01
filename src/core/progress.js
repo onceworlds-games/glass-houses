@@ -167,7 +167,7 @@ export function applyRound(prev, info) {
   add('Hot breaks', XP.hotBreak * count(info.hotBroke));
   for (const [id, t] of Object.entries(TRICKS)) {
     const n = count(trick[id], 999);
-    if (n) add(n > 1 ? `${t.name} x${n}` : t.name, t.xp * n);
+    if (n) add(n > 1 ? `${t.name} ×${n}` : t.name, t.xp * n);
   }
   add('Salvage', XP.salvage * count(info.salvaged));
   const place = Number.isInteger(info.place) && info.place >= 1 ? info.place : 6;

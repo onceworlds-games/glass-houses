@@ -4,7 +4,8 @@ import { buildField } from '../src/core/streets.js';
 import { createRound, glassCount, REPAIR_ORDER, LONG_SHOT_M } from '../src/core/round.js';
 import { paneCentre, solveAim, velocityOf, handOf, windAt } from '../src/core/physics.js';
 import { PANES, COLS, GLASS, CRACKED, BROKEN, REPAIR_MS, STORE_CLOSE_MS, AMMO_MAX } from '../src/core/config.js';
-import { TWIST_IDS, twistRules, pickTwist, goldPanes, dailyOf, dayOf, DAY_MS } from '../src/core/twists.js';
+import { TWIST_IDS, twistRules, pickTwist, matchTwist, goldPanes, dailyOf, dayOf, DAY_MS } from '../src/core/twists.js';
+import { hash } from '../src/core/rng.js';
 import { checkThrow, readPresence, readHouses, readRoundData, readLook } from '../src/core/net.js';
 import { createSync } from '../src/core/sync.js';
 import { simulate } from '../src/core/sim.js';
@@ -53,6 +54,17 @@ test('the Gazette: round 1 is calm, later rounds draw from every twist, never th
   for (const id of TWIST_IDS) assert.ok(later.has(id), `${id} comes up`);
   assert.equal(twistRules('nonsense').id, 'quiet');
   assert.equal(twistRules('gale').windScale > 1, true);
+});
+
+test("a match's twists: every page works out any round's twist from the shared random, calm first, never twice running", () => {
+  for (let m = 0; m < 30; m++) {
+    const seedOf = (r) => (hash(`m${m}:twist:${r}`) % 2147483646) + 1;
+    const list = [1, 2, 3, 4, 5].map((r) => matchTwist(seedOf, r));
+    assert.ok(['quiet', 'golden', 'sale', 'bricks', 'gnomes'].includes(list[0]), list.join());
+    for (let r = 1; r < 5; r++) assert.ok(list[r] !== list[r - 1] || list[r] === 'quiet', list.join());
+    // The same answer asked again, or asked round by round.
+    assert.deepEqual(list, [1, 2, 3, 4, 5].map((r) => matchTwist(seedOf, r)));
+  }
 });
 
 test('golden panes: the same few on every house, spread along the front and over both floors', () => {
