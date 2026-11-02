@@ -1263,9 +1263,14 @@ async function boot() {
     const last = hs[hs.length - 1].angle;
     const ring = last - first > Math.PI * 1.5;
     const a = ring ? 0.6 - t * 0.00004 : first + 0.75 + (last - first - 0.45) * (0.5 + 0.5 * Math.sin(t * 0.00003));
-    const r = f.R * 0.6;
-    tv.set(Math.cos(a) * r, 4.4 + Math.sin(t * 0.00013) * 0.7, Math.sin(a) * r);
-    tl.set(Math.cos(a - 0.95) * f.R * 0.86, 2.2, Math.sin(a - 0.95) * f.R * 0.86);
+    // Upright (a phone), the title's cards cover the middle of the screen: eye level and tilted up, so the lawns, people and
+    // glass fill the band between the jobs and the door.
+    const portrait = stage.width < stage.height;
+    const r = Math.min(f.R * (portrait ? 0.62 : 0.6), f.R - 8.4);
+    tv.set(Math.cos(a) * r, (portrait ? 1.7 : 4.4) + Math.sin(t * 0.00013) * 0.6, Math.sin(a) * r);
+    const la = portrait ? 0.62 : 0.95;
+    const lr = f.R * (portrait ? 1 : 0.86);
+    tl.set(Math.cos(a - la) * lr, portrait ? 6.6 : 2.2, Math.sin(a - la) * lr);
     lookAtSmooth(tv, tl, dt, 1.5);
   }
 

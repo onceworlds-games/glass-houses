@@ -445,7 +445,8 @@ All big words and numbers are **house numerals**: cream or ink letters on enamel
 offset shadow as if mounted on a wall in a low sun. No dark boxes behind HUD items, no glassy panels.
 
 1. **Title.** The 3D attract round fills the screen (a slow dolly along the inside of the lawns, looking ahead along the
-   glass fronts curving away to the right with the oak out of shot; a cut to a close shot when a house falls). "Glass Houses" in two lines of big mounted letters, top left. Top right, your career: level on a gold starburst,
+   glass fronts curving away to the right with the oak out of shot; upright on a phone, at eye level and tilted up so the
+   lawns, people and glass fill the gap between the jobs and the door; a cut to a close shot when a house falls). "Glass Houses" in two lines of big mounted letters, top left. Top right, your career: level on a gold starburst,
    rank, XP bar, the day streak's flame; under it today's jobs on a clipboard and the panes the whole street broke today.
    Bottom centre, one tall **Play** door in tangerine with a brass knob (Space or Enter on desktop), the **Locker** door on its
    left ("New" when a look unlocked) and the **Daily Street** on its right (today's street, twist and your best). The
