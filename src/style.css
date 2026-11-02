@@ -939,7 +939,7 @@ html, body {
 #title .daily-btn:hover { transform: translateY(-3px) rotate(-2.5deg); }
 #title .daily-btn .k { font: 400 19px var(--paper) !important; border-bottom: 3px double #1f1b1a; padding-bottom: 3px; margin-bottom: 3px; white-space: nowrap; }
 #title .daily-btn .st { font: 700 14px var(--display); }
-#title .daily-btn .tw { font: 700 11px var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--terra); }
+#title .daily-btn .tw { font: 700 12px var(--display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--terra); }
 #title .daily-btn .best { font: 500 12px var(--label); opacity: 0.75; }
 #title .daily-btn:not(.played) .best { color: var(--blade); opacity: 1; font-weight: 700; }
 
