@@ -232,12 +232,21 @@ function win(stage, W) {
   // The last shards of the others still settling.
   for (const k of [2, 4]) shatter(W, R, k, [12, 13, 14], { x: R.field.houses[k].fx, y: 0.2, z: R.field.houses[k].fz }, 400);
   const b = R.bodies[3];
-  b.x = hh.spawn.x + hh.fx * 1.5;
-  b.z = hh.spawn.z + hh.fz * 1.5;
-  b.yaw = Math.atan2(hh.fx, hh.fz);
+  b.x = hh.spawn.x + hh.fx * 1.2 + hh.rx * 0.9;
+  b.z = hh.spawn.z + hh.fz * 1.2 + hh.rz * 0.9;
+  const cam = { x: hh.cx + hh.fx * 10.2 + hh.rx * 2.4, y: hh.elev + 0.75, z: hh.cz + hh.fz * 10.2 + hh.rz * 2.4 };
+  // Facing the lens, a fist in the air.
+  b.yaw = Math.atan2(-(cam.x - b.x), -(cam.z - b.z));
   b.lastThrowAt = 11950;
   draw(W, R);
-  lookFrom(stage, hh.cx + hh.fx * 16 + hh.rx * 4, hh.elev + 2.0, hh.cz + hh.fz * 16 + hh.rz * 4, hh.cx - hh.rx * 1, hh.elev + 3.0, hh.cz - hh.rz * 1, 62);
+  W.figures[3].cheer();
+  for (let k = 0; k < 6; k++) W.figures[3].update(b, R.now + k * 50, 0.05, false);
+  // The street's confetti over them, caught on its way down.
+  W.fx.confetti(b.x + hh.fx * 1.6, hh.elev + 0.6, b.z + hh.fz * 1.6, 110);
+  W.fx.confetti(b.x - hh.fx * 0.5 - hh.rx * 2.2, hh.elev + 1.0, b.z - hh.fz * 0.5 - hh.rz * 2.2, 70);
+  W.fx.confetti(b.x + hh.fx * 3.2 + hh.rx * 1.6, hh.elev + 0.2, b.z + hh.fz * 3.2 + hh.rz * 1.6, 40);
+  for (let k = 0; k < 9; k++) W.fx.update(0.05, 12000 + k * 50, R.windNow());
+  lookFrom(stage, cam.x, cam.y, cam.z, hh.cx + hh.fx * 3.5 - hh.rx * 0.2, hh.elev + 2.55, hh.cz + hh.fz * 3.5 - hh.rz * 0.2, 54);
 }
 
 /** Several neighbours at once: the street at night, stones in the air between the lawns, trails glowing. */
@@ -273,10 +282,13 @@ function icon(stage, W) {
   shatter(W, R, 2, [14, 15], { x: hh.fx, y: 0.3, z: hh.fz }, 90);
   for (let k = 0; k < 2; k++) W.glass.burst(2, 14 + k, { x: hh.fx, y: 0.4, z: hh.fz }, 1.6);
   for (let t = 0; t < 60; t += 16) W.glass.update(0.016);
-  const cam = { x: hh.cx + hh.fx * 12.5 + hh.rx * 4.5, y: hh.elev + 1.3, z: hh.cz + hh.fz * 12.5 + hh.rz * 4.5 };
-  const look = { x: hh.cx + hh.rx * 0.6, y: hh.elev + 2.6, z: hh.cz + hh.rz * 0.6 };
-  const s = throwAt(R, 0, 2, 3, 'stone', false, 0);
-  if (s) inbound(s, cam, paneCentre(hh, 3, {}), Math.hypot(look.x - cam.x, look.z - cam.z) - 4.5);
+  // Close enough that the burst still reads at the size of a thumbnail.
+  const burstAt = paneCentre(hh, 14, {});
+  const cam = { x: burstAt.x + hh.fx * 6.2 + hh.rx * 2.2, y: hh.elev + 1.5, z: burstAt.z + hh.fz * 6.2 + hh.rz * 2.2 };
+  const look = { x: burstAt.x + hh.fx * 0.5 + hh.rx * 0.3, y: burstAt.y - 0.35, z: burstAt.z + hh.fz * 0.5 + hh.rz * 0.3 };
+  // The next stone, from just past the lens, on its way to finish the cracked pane.
+  const s = throwAt(R, 0, 2, 16, 'stone', false, 0);
+  if (s) inbound(s, cam, paneCentre(hh, 16, {}), 3.4);
   draw(W, R);
   lookFrom(stage, cam.x, cam.y, cam.z, look.x, look.y, look.z, 58);
 }
