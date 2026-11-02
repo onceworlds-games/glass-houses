@@ -380,6 +380,11 @@ export function createUI(root, opts = {}) {
       hintUntil = now + ms;
     },
 
+    /** Clears a tip early (the round's over: the result has the screen). */
+    hintOff() {
+      if (hintUntil) hintUntil = 1;
+    },
+
     keyhint(t) {
       toggle(keyhint, 'hidden', !t);
       if (t) text(keyhint, t);

@@ -485,10 +485,34 @@ export function createFx(scene, quality = 'medium', camera = null) {
 
     /** A pane goes: a white flash at the hole (a hot stone's goes up in flames, a golden one in gold). */
     shatter(x, y, z, opts = {}) {
+      // Bigger the further away, so a break reads from across the street.
       const far = opts.far ?? 10;
-      const k = 1 + Math.min(2, far / 14);
+      const k = 1 + Math.min(1.2, Math.max(0, far - 8) / 16);
       parts.emit({ x, y, z, color: '#FFFFFF', size: 1.1 * k, grow: 1.8, life: 0.16, shape: SHAPE.star, add: true, rot: rand(0, 1.5) });
       parts.emit({ x, y, z, color: '#DFF8FF', size: 0.5 * k, grow: 4, life: 0.32, alpha: 0.7, shape: SHAPE.ring, add: true });
+      // Glitter: points of light thrown out with the glass, tumbling as they fall.
+      const d = opts.dir;
+      const len = d ? Math.hypot(d.x, d.y, d.z) || 1 : 1;
+      for (let i = 0; i < (low ? 8 : 18); i++) {
+        const sp = d ? rand(1.5, 4.5) / len : 0;
+        parts.emit({
+          x: x + rand(-0.4, 0.4),
+          y: y + rand(-0.4, 0.4),
+          z: z + rand(-0.4, 0.4),
+          vx: (d ? d.x * sp : 0) + rand(-1.6, 1.6),
+          vy: (d ? d.y * sp * 0.5 : 0) + rand(-0.4, 2.2),
+          vz: (d ? d.z * sp : 0) + rand(-1.6, 1.6),
+          color: pick(['#FFFFFF', '#E6FBFF', '#FFF2C8']),
+          bright: 1.5,
+          size: rand(0.07, 0.15) * k,
+          life: rand(0.35, 0.8),
+          shape: SHAPE.star,
+          add: true,
+          gravity: 6,
+          drag: 1.4,
+          spin: rand(-8, 8),
+        });
+      }
       if (opts.hot) {
         for (let i = 0; i < (low ? 10 : 22); i++) parts.emit({ x: x + rand(-0.5, 0.5), y: y + rand(-0.5, 0.5), z: z + rand(-0.5, 0.5), vx: rand(-1.5, 1.5), vy: rand(0, 2.5), vz: rand(-1.5, 1.5), color: pick(FIRE), bright: 1.5, size: rand(0.4, 0.8), grow: 0.3, life: rand(0.35, 0.6), shape: SHAPE.flame, add: true, rise: 3, drag: 2 });
         X.embers(x, y, z, low ? 12 : 26);

@@ -455,7 +455,8 @@ offset shadow as if mounted on a wall in a low sun. No dark boxes behind HUD ite
      the piece on show in the part of the screen the sheet leaves free (beside it on a wide screen, above it on a phone),
      standing in front of the oak. The menu tune plays.
    - **Daily Street:** the Gazette (the day's street and twist), the camera down onto your lawn, a round against the street's
-     five. Out early: watch as a ghost or skip to the end. Then the receipt and the Daily Street's page: your score, your best,
+     five. Out early: watch as a ghost or skip to the end. Then the receipt and the Daily Street's page: your score (rolling up
+     like a press counter, "Your best today!" stamped under it when it is), your best,
      the wall of the day's best, Again or Done. Esc pauses it.
 2. **Lobby.** Behind and above your house, looking across the green (higher and further back in portrait). On each lawn, a
    real-estate sign on a post: the owner's symbol and name (a person or a bot neighbour), a key for the host, a check when
@@ -541,7 +542,8 @@ look) colours their own front. A cracked pane gets a star crack; a broken pane l
 rim, and the room shows through.
 
 **Shattering is the star:** a break throws slivers that flash as they leave, big pieces that slide out and burst again below,
-glitter hanging in the air and a puff of dust on the plinth; the shards settle into glittering piles on the patio that grow
+a white star and ring at the pane (bigger the further away, so a break reads from across the street), points of glitter
+thrown out the way the stone was going and a puff of dust on the plinth; the shards settle into glittering piles on the patio that grow
 until the round is swept (a capped pool by quality). A hot break adds embers and fire, a knockout a ring of shards and
 confetti and the lights going out. Particles are one pool of camera-facing quads in two instanced meshes (soft and glowing),
 each a shape from a small painted sheet: puffs, sparks, flames, hearts, confetti, newspaper scraps, bubbles, stars, smoke,
@@ -626,11 +628,12 @@ Every picture is drawn by the game's own renderer from a real round frozen at it
   the sky.
 - **Action** (`action`, thumb-2): a glass front close up, one pane exploding out toward you and another already gone, the next
   stone a stride from the glass. No text.
-- **Win** (`win`, thumb-3): the last house standing at sunset, its glass lit, the others out.
+- **Win** (`win`, thumb-3): the last house standing at sunset from low on the lawn, its owners with their fists in the air and
+  the street's confetti coming down around them.
 - **Multi** (`multi`, thumb-4): Porch Lights at night from under the oak: two neighbours trading stones across their lawns,
   trails glowing, both fronts bursting.
-- **Icon**: a whole glass front at golden hour with two panes bursting and a stone flying at it from just past the lens. No
-  text.
+- **Icon**: close on a glass front at golden hour, two panes bursting and the next stone, from just past the lens, about to
+  finish a cracked one. Close enough to read at thumbnail size. No text.
 - **Badges**: a bold symbol for each on a coloured disc (a stone, a cracked pane, a house, a half-full pane, a clean pane with
   sparkles, two clacking stones, a gnome, a head with stars, a sunburst with a check, eight panes round a lawn; a stone on
   fire, a hot stone knocked down, a pane with a curved arrow, a dotted arc across to a cracked pane, the Gazette, a clipboard

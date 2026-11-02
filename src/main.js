@@ -702,7 +702,7 @@ async function boot() {
           for (const p of e.panes) W.glass.burst(e.house, p, dir, e.kind === 'brick' ? 1.25 : e.hot ? 1.2 : 1, s.d);
           // A flash at the pane and a burst of glitter: a break reads from across the street.
           W.fx.glint(paneTmp.x, paneTmp.y, paneTmp.z, 1.6 + Math.min(2.4, s.d / 10));
-          W.fx.shatter(paneTmp.x, paneTmp.y, paneTmp.z, { far: s.d > 22, hot: !!e.hot });
+          W.fx.shatter(paneTmp.x, paneTmp.y, paneTmp.z, { far: s.d, dir, hot: !!e.hot });
           sound.shatter(s.d, s.pan, e.house === me, e.panes.length);
           if (breakLog && breakLog.length < 200) breakLog.push({ house: e.house, by: e.by, panes: e.panes.length, d: Math.round(s.d) });
           if (s.d < 9) trauma = Math.min(1, trauma + 0.12);
@@ -1897,6 +1897,7 @@ async function boot() {
       if (phase === 'roundEnd' && endHolding()) ui.banner('', null);
       else if (phase === 'roundEnd') {
         feel.quiet();
+        ui.hintOff();
         const ranking = match.last?.ranking ?? sync.ranking();
         const top = ranking[0] ?? [];
         let t;
@@ -1941,6 +1942,7 @@ async function boot() {
       if (g.shown || endHolding()) ui.banner('', null);
       else {
         feel.quiet();
+        ui.hintOff();
         const w = g.winner >= 0 ? R.seats[g.winner].name : '';
         const t = g.won ? 'Your house stands' : w ? `${w}${w.endsWith('s') ? "'" : "'s"} house stands` : 'A tie';
         ui.banner(`dre${t}`, [{ t, size: 'mid', drop: true }]);

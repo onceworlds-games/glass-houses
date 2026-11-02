@@ -1060,7 +1060,11 @@ html, body {
 #dailyres .kick { font: 700 13px var(--display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--terra); text-align: center; }
 #dailyres .score { display: flex; flex-direction: column; align-items: center; margin: 6px 0 8px; }
 #dailyres .score .v { font: 400 64px var(--paper); line-height: 1; }
+#dailyres .score .v { font-variant-numeric: tabular-nums; }
 #dailyres .score .l { font: 700 15px var(--display); margin-top: 4px; }
+#dailyres .score .l.pb { color: #fff8ea; background: var(--terra); padding: 3px 10px 1px; border-radius: 3px; transform: rotate(-2deg); }
+#dailyres .score .l.pb.stamp { animation: pbstamp 0.45s 1.25s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+@keyframes pbstamp { from { opacity: 0; transform: rotate(-9deg) scale(2.4); } to { opacity: 1; transform: rotate(-2deg) scale(1); } }
 #dailyres .wall { border-top: 1px solid rgba(31, 27, 26, 0.3); padding-top: 8px; }
 #dailyres .wall .wh { font: 400 18px var(--paper); margin-bottom: 4px; }
 #dailyres .wall .wait { font: 500 14px var(--label); opacity: 0.7; padding: 6px 0; }

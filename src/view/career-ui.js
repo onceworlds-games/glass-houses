@@ -141,6 +141,7 @@ export function createCareerUI(root, titleEl, opts = {}) {
   const xp = el('div', 'hidden', root);
   xp.id = 'xp';
   let xpTimers = [];
+  let countRaf = 0;
 
   // ------------------------------------------------------------------ the Daily Street's results
   const daily = el('div', 'hidden', root);
@@ -306,7 +307,10 @@ export function createCareerUI(root, titleEl, opts = {}) {
      */
     daily(d) {
       if (!d && daily.classList.contains('hidden')) return;
+      // The paper arrives once; the wall loading in redraws it without counting the score up again.
+      const fresh = daily.classList.contains('hidden');
       daily.classList.toggle('hidden', !d);
+      cancelAnimationFrame(countRaf);
       if (!d) return;
       daily.innerHTML = '';
       const paper = el('div', 'paper', daily);
@@ -315,8 +319,21 @@ export function createCareerUI(root, titleEl, opts = {}) {
       el('div', 'rule', paper);
       el('div', 'kick', paper).textContent = `${streetName(d.street)} · ${gazetteOf(d.twist).chip}`;
       const sc = el('div', 'score', paper);
-      el('span', 'v', sc).textContent = num(d.score);
-      el('span', 'l', sc).textContent = d.personal ? 'Your best today!' : `Your best: ${num(d.best)}`;
+      const v = el('span', 'v', sc);
+      v.textContent = num(fresh ? 0 : d.score);
+      if (fresh && d.score > 0) {
+        // The headline figure rolls up like a press counter.
+        const t0 = performance.now() + 350;
+        const roll = () => {
+          // The page's clock, not the frame's timestamp (they disagree under a capture's virtual time).
+          const k = Math.min(1, Math.max(0, (performance.now() - t0) / 900));
+          v.textContent = num(Math.round(d.score * (1 - (1 - k) ** 3)));
+          if (k < 1) countRaf = requestAnimationFrame(roll);
+        };
+        countRaf = requestAnimationFrame(roll);
+      }
+      const lb = el('span', `l${d.personal ? ' pb' : ''}${d.personal && fresh ? ' stamp' : ''}`, sc);
+      lb.textContent = d.personal ? 'Your best today!' : `Your best: ${num(d.best)}`;
       const wall = el('div', 'wall', paper);
       el('div', 'wh', wall).textContent = "Today's best on the street";
       if (!d.wall) el('div', 'wait', wall).textContent = 'Reading the paper…';
