@@ -35,14 +35,13 @@
     "panes-today": { "type": "counter", "add": [1, 120], "reset": "daily" }
   },
   "controls": [
-    { "keys": ["Mouse"], "action": "Aim (click in the street first)" },
+    { "keys": ["Mouse"], "action": "Aim (click to aim)" },
     { "keys": ["Hold Click", "Hold Space"], "action": "Wind up, let go to throw" },
     { "keys": ["W", "A", "S", "D"], "action": "Move on your lawn" },
     { "keys": ["Arrows"], "action": "Move on your lawn" },
     { "keys": ["Hold R"], "action": "Repair your glass" },
     { "keys": ["Esc"], "action": "Free the mouse" },
     { "keys": ["Drag"], "action": "Aim on a touch screen" },
-    { "keys": ["Throw", "Repair"], "action": "Touch buttons" },
-    { "keys": ["Space", "Enter"], "action": "Play on the title" }
+    { "keys": ["Throw", "Repair"], "action": "Touch buttons" }
   ]
 }

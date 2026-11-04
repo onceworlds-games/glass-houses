@@ -43,7 +43,7 @@ function starsHtml(n) {
 }
 
 /**
- * opts: { onPlay, onReady, onStreet(index), onRounds(n), onResume, onPause, onClose (the room-closed card's button) }
+ * opts: { onStreet(index), onRounds(n) }
  */
 export function createUI(root, opts = {}) {
   root.innerHTML = '';
@@ -53,12 +53,6 @@ export function createUI(root, opts = {}) {
   const title = el('div', 'screen hidden', root);
   title.id = 'title';
   el('h1', 'mounted', title, '<span>Glass</span><span>Houses</span>');
-  const play = el('button', 'door', title, 'Play');
-  play.type = 'button';
-  play.addEventListener('click', (e) => {
-    e.stopPropagation();
-    opts.onPlay?.();
-  });
   const brass = el('div', 'brass hidden', title);
 
   // ------------------------------------------------------------------ lobby
@@ -88,9 +82,6 @@ export function createUI(root, opts = {}) {
     b.addEventListener('click', () => opts.onRounds?.(n));
     return b;
   });
-  const go = el('button', 'go hidden', lobby, 'Ready');
-  go.type = 'button';
-  go.addEventListener('click', () => opts.onReady?.());
   let lobbyStreet = 0;
   prev.addEventListener('click', () => opts.onStreet?.(lobbyStreet - 1));
   next.addEventListener('click', () => opts.onStreet?.(lobbyStreet + 1));
@@ -163,7 +154,7 @@ export function createUI(root, opts = {}) {
   const cardPanel = el('div', 'panel', card);
 
   let screen = '';
-  const screens = { title, lobby, play: hud };
+  const screens = { lobby, play: hud };
 
   const U = {
     get screen() {
@@ -177,10 +168,12 @@ export function createUI(root, opts = {}) {
       return (parseFloat(wind.style.top) || 118) + (wind.offsetHeight || 64);
     },
 
-    /** 'title', 'lobby', 'play' or 'none'. */
+    /** 'lobby', 'play' or 'none'. */
     show(name) {
       if (screen === name) return;
       screen = name;
+      // The name and the career stay with the lobby.
+      toggle(title, 'hidden', name !== 'lobby');
       for (const [k, e] of Object.entries(screens)) toggle(e, 'hidden', k !== name);
       U.layout();
     },
@@ -194,7 +187,7 @@ export function createUI(root, opts = {}) {
 
     /**
      * info: { street, unlocked, ladder (alone: the eight blades), pick (this page may change it), stars (per street), rounds,
-     *         go (our own Ready button: standalone), signs: [{ x, y, name, owner, ready, you, host, visible }] }
+     *         results (the last match's standings are up: the jobs make way), signs: [{ x, y, name, owner, you, host, visible }] }
      */
     lobby(info) {
       lobbyStreet = info.street;
@@ -229,8 +222,10 @@ export function createUI(root, opts = {}) {
         toggle(roundBtns[k], 'sel', ROUND_OPTIONS[k] === info.rounds);
         roundBtns[k].disabled = !info.pick;
       }
-      toggle(go, 'hidden', !info.go);
-      if (info.go) text(go, info.goLabel ?? 'Ready');
+      if (title.classList.contains('results') !== !!info.results) {
+        toggle(title, 'results', !!info.results);
+        U.layout();
+      }
       // A sign on each lawn.
       for (let i = 0; i < info.signs.length; i++) {
         const sg = info.signs[i];
@@ -243,11 +238,11 @@ export function createUI(root, opts = {}) {
           e = signEls[i] = { root: root2, board, arrow, key: '' };
         }
         const owner = OWNERS[sg.owner % OWNERS.length];
-        const key = `${sg.name}|${sg.owner}|${sg.ready}|${sg.you}|${sg.host}`;
+        const key = `${sg.name}|${sg.owner}|${sg.you}|${sg.host}`;
         if (e.key !== key) {
           e.key = key;
           e.root.style.setProperty('--c', owner.color);
-          e.board.innerHTML = `${symbolSvg(owner.symbol)}<span class="nm"></span>${sg.host ? svg(KEY, 'host') : ''}${sg.ready ? '<span class="ok"></span>' : ''}`;
+          e.board.innerHTML = `${symbolSvg(owner.symbol)}<span class="nm"></span>${sg.host ? svg(KEY, 'host') : ''}`;
           e.board.querySelector('.nm').textContent = sg.name;
           toggle(e.root, 'you', sg.you);
         }
@@ -519,16 +514,13 @@ export function createUI(root, opts = {}) {
       const mh = mine.offsetHeight || 110;
       mine.style.bottom = `${bottomClear(W / 2 - mw / 2, mw, mh, 14)}px`;
       keyhint.style.top = `${topClear(W - 90, 80, 14)}px`;
-      // The lobby: our own Ready (off the platform only) above anything the platform keeps at the bottom.
       const lobbyH = reserved.list.find((r) => r.kind === 'lobby');
-      const strip = lobbyH ? Math.max(0, H - lobbyH.y) : 0;
-      go.style.bottom = `${Math.max(18, strip + 16)}px`;
       const tw = top.offsetWidth || 400;
       top.style.top = `${topClear(W / 2 - tw / 2, tw, 12)}px`;
       const sb = Math.max(lobbyH ? H - lobbyH.y + 10 : 96, 96);
-      if (W <= 560) standings.style.bottom = `${sb + (go.classList.contains('hidden') ? 0 : 80)}px`;
+      // On a phone the standings stop above the lobby's doors.
+      if (W <= 560) standings.style.bottom = `${title.classList.contains('hidden') ? sb : Math.max(sb, 146)}px`;
       else standings.style.bottom = '';
-      play.style.bottom = `${Math.max(28, H * 0.07, bottomClear(W / 2 - 75, 150, 196, 28))}px`;
     },
   };
 

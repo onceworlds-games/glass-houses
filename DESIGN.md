@@ -28,7 +28,7 @@ The sun sinks while you play.
 | Throw | Hold left click (or Space) to wind up, let go to throw | Hold the big **Throw** button, let go to throw |
 | Move on your lawn | W A S D | The platform's stick (`stick: 'wasd'`) |
 | Repair | Hold R | Hold the **Repair** button |
-| Free the mouse | Esc (opens the game's small card: Resume) | (no lock on touch) |
+| Free the mouse | Esc (the match goes on; click to aim again) | (no lock on touch) |
 
 - Two buttons on phones: `ow.controls.set({ stick: 'wasd', buttons: [{ id: 'throw', label: 'Throw', key: ' ' }, { id: 'repair',
   label: 'Repair', key: 'r' }] })`. Aim-drag keeps working with a second finger while Throw is held. The aim zone is the right
@@ -50,11 +50,10 @@ the glass house behind you, every house's health is its house number, and you ch
 
 | Time | Screen | Words |
 |---|---|---|
-| 0 s | **Title.** The street alive: a slow crane shot round the green while six bot neighbours play a real round; when a house falls the camera cuts to it. "Glass Houses" in two lines of big mounted letters top left; top right your level on a starburst, your rank and XP bar, your day streak's flame, and today's three jobs on a clipboard. One tangerine **Play** door with a brass knob bottom centre, the **Locker** on its left, the **Daily Street** (today's street and twist, your best) on its right. The platform's Ready strip is hidden here (`room.hideLobby(true)`). | none |
-| ~2 s | Play (click, tap, Space or Enter) starts the sound. **The lobby:** the camera sits behind and above your house, looking over your lawn at the green. Every lawn has a real-estate sign with a name (yours with a big arrow and your colour). At the top: the street plate (alone: the ladder of eight street blades, padlocks on the locked ones) and the Rounds plates (1, 3, 5). | none |
-| ~4 s | The platform's Ready bar at the bottom. One tap. With others: everyone readies (public), or the host starts (private). If a match starts while you're still on the title, the game leaves the title by itself. | the platform's "Ready" |
-| ~5 s | **Our own 3-2-1** (`ownCountdown: true`): big numerals drop with a clack each while the camera comes down from above onto your lawn. | "3", "2", "1" |
-| ~5 s | While the camera comes down, **the Gazette's front page** drops in: the round's twist as a headline ("Heatwave", "Hail on the Way") with one line under it; then it shrinks to a chip under the clock. | the headline |
+| 0 s | **The lobby, straight away.** No Play door: the game joins as it loads. The camera sits behind and above your house, looking over your lawn at the green. Every lawn has a real-estate sign with a name (yours with a big arrow and your colour). At the top: the street plate (alone: the ladder of eight street blades, padlocks on the locked ones) and the Rounds plates (1, 3, 5). Around it "Glass Houses" in mounted letters, your level on a starburst, rank, XP bar, the day streak's flame, today's three jobs on a clipboard, the **Locker** and the **Daily Street** (today's street and twist, your best). The first key or tap starts the sound. | none |
+| ~2 s | The platform's Ready bar at the bottom, the only way to start. One tap. With others: everyone readies (public), or the host starts (private). Readying closes the Locker or the Daily Street, and so does a match starting with you in it. | the platform's "Ready" |
+| ~3 s | **The platform's 3-2-1**, with a clack from the game on each number, while the camera comes down from above onto your lawn. Play begins when it ends: no click, no second count. | the platform's numerals |
+| from round 2 | Before each round after the first, **the Gazette's front page** drops in: the round's twist as a headline ("Heatwave", "Hail on the Way") with one line under it; then it shrinks to a chip under the clock. | the headline |
 | 8 s | **Round 1.** First person, your own stone in your hand, the green ahead, a number plate over every house. | "Break their glass" (your first 3 rounds) |
 | 10 s | Hold: the dotted arc grows from your hand and lands on what you aim at (a cross on a wall, a ring on the ground). | "Hold to wind up" (touch: "Hold Throw") until the first hold; then "Let go to throw", once |
 | 11 s | First throw: whoosh, the stone arcs, a pane bursts, the number over that house flips 20 to 19. | none |
@@ -255,20 +254,19 @@ neighbours** of that street. Nothing is separate: it is the same lobby, the same
 - After a solo match, the lobby comes back with the next unlocked street already picked: one tap on Ready is the next go.
 - How long it lasts: a round is 2-3 minutes; eight streets with harder neighbours and new conditions take 1-2 hours to clear
   and much longer to three-star (24 stars). Stars won on any street count, in a public server too.
-- Esc frees the mouse and shows a small card (Resume). The platform lets a private server's host or a solo server pause a
-  match, so there the card also has Pause (`room.pauseMatch()`), and hiding the tab pauses the round when nobody else is
-  playing; a round in a public server keeps running (it is 3 minutes at most).
+- Esc frees the mouse and nothing else: a match never stops for it, and a small "Click to aim" stays top right until the next
+  click. Only a round of one that's hidden pauses itself (`room.pauseMatch()`) and goes on by itself when the tab comes back.
 
 ## Multiplayer
 
-- **A public game**, up to 6 per street: `ow.rooms.join({ maxPlayers: 6, minPlayers: 1, lobby: 'bar', ownCountdown: true,
+- **A public game**, up to 6 per street: `ow.rooms.join({ maxPlayers: 6, minPlayers: 1, lobby: 'bar',
   settings: [{ id: 'street', label: 'Street', options: 1-8 with names, default: 1 }, { id: 'rounds', label: 'Rounds', options:
   [1, 3, 5], default: 3 }] })`. Friends get private servers and invites from the platform.
 - **Lobby:** drawn by the game (the street from above your house, signs on the lawns), with the platform's Ready bar
   (`lobby: 'bar'`). Public: everyone
   readies and the room starts the countdown. Private: the host's Start. Joining never starts anything. The host picks the
-  street (from the streets the host has unlocked) and the rounds on our plates (`room.setSetting`); a change clears the ready
-  flags (`room.clearReady()`).
+  street (from the streets the host has unlocked) and the rounds on our plates (`room.setSetting`, and the room asks everyone to ready again). The strip stays up under the
+  Locker and the Daily Street (never `hideLobby`), and the game has no Ready of its own.
 - **Bots in empty seats** (`createBots(match, { host, fill: 6 })`), named and dressed from the street's lineup. They play like
   people (below).
 - **Match:** `createMatch(room, { rounds: 'rounds', roundSeconds: 180, introSeconds: 3, roundEndSeconds: 6, resultsSeconds: 20,
@@ -311,7 +309,7 @@ The idea: **every page runs the same deterministic stone simulation; each house'
 
 ## Bots
 
-Bots run on the host's page with a brain from a pure module (`bots.js`), the same for the title's attract mode and the
+Bots run on the host's page with a brain from a pure module (`bots.js`), the same for the Daily Street and the
 trailer's autoplay. A bot sees what a player sees: houses' masks, stones in the air, the windsock.
 
 - **Reaction:** 0.6 s (skill 0) to 0.25 s (skill 1) before reacting to anything new.
@@ -371,8 +369,8 @@ Everything is saved with `ow.save` (`profile`), written at a round's end, never 
   live (the house behind shows it: a thrown stone with its trail, the glass tinted, the lawn dressed), locked ones say what
   unlocks them.
 - **Three daily jobs**, the same for everyone each day ("Break 50 panes", "Land 3 trick shots", "Win a pane back with a
-  knockout", "Play the Daily Street"...), on the title with their bars; 150 XP each, 250 more for all three.
-- **The day streak:** play on consecutive days; the flame on the title counts them, the first round of a day pays for it.
+  knockout", "Play the Daily Street"...), in the lobby with their bars; 150 XP each, 250 more for all three.
+- **The day streak:** play on consecutive days; the flame in the lobby counts them, the first round of a day pays for it.
 - **The Daily Street:** one street, one seed, one twist a day, the same for everyone (`dailyOf(day)`), played alone against
   its five neighbours. Scored: 10 per pane, 60 per knockout, each trick's XP, 600 / 300 / 150 for first, second, third, and
   15 per pane kept if your house stands. Your best of the day goes on **the neighbourhood's wall** (`ow.data` list
@@ -444,13 +442,10 @@ Everything is saved with `ow.save` (`profile`), written at a round's end, never 
 All big words and numbers are **house numerals**: cream or ink letters on enamel plates in the owner's colour, with a hard
 offset shadow as if mounted on a wall in a low sun. No dark boxes behind HUD items, no glassy panels.
 
-1. **Title.** The 3D attract round fills the screen (a slow dolly along the inside of the lawns, looking ahead along the
-   glass fronts curving away to the right with the oak out of shot; upright on a phone, at eye level and tilted up so the
-   lawns, people and glass fill the gap between the jobs and the door; a cut to a close shot when a house falls). "Glass Houses" in two lines of big mounted letters, top left. Top right, your career: level on a gold starburst,
+1. **Lobby's career.** "Glass Houses" in mounted letters behind the lobby, left (not on a phone). Top right, your career: level on a gold starburst,
    rank, XP bar, the day streak's flame; under it today's jobs on a clipboard and the panes the whole street broke today.
-   Bottom centre, one tall **Play** door in tangerine with a brass knob (Space or Enter on desktop), the **Locker** door on its
-   left ("New" when a look unlocked) and the **Daily Street** on its right (today's street, twist and your best). The
-   platform's Ready strip is hidden on the title.
+   Beside the platform's strip, the **Locker** door ("New" when a look unlocked) and the **Daily Street** (today's street, twist and your best).
+   On a phone they stack over the strip, with the street above them. All of it stays clear of the strip, which is always up.
    - **Locker:** tabs for Stone, Trail, Glass and Lawn, a tile per look; your house tries each one on (a stone thrown every two
      seconds with the camera chasing it, the glass tinted, the lawn dressed). For glass and lawn the camera frames the front or
      the piece on show in the part of the screen the sheet leaves free (beside it on a wide screen, above it on a phone),
@@ -460,13 +455,13 @@ offset shadow as if mounted on a wall in a low sun. No dark boxes behind HUD ite
      like a press counter, "Your best today!" stamped under it when it is), your best,
      the wall of the day's best, Again or Done. Esc pauses it.
 2. **Lobby.** Behind and above your house, looking across the green (higher and further back in portrait). On each lawn, a
-   real-estate sign on a post: the owner's symbol and name (a person or a bot neighbour), a key for the host, a check when
-   ready; yours has a big arrow in your colour. Top centre: the **street** (alone: the ladder, eight green street-name blades
+   real-estate sign on a post: the owner's symbol and name (a person or a bot neighbour), a key for the host; a porch light
+   comes on when they ready; yours has a big arrow in your colour. Top centre: the **street** (alone: the ladder, eight green street-name blades
    with stars and padlocks; with others: the host picks from their unlocked streets) and the **Rounds** plates (1, 3, 5).
-   After a match, the standings board sits at the right until the next match starts. The bottom stays clear for the
-   platform's Ready bar.
-3. **Countdown and round intro.** Big numerals 3, 2, 1 drop in with a clack each while the camera comes down to your lawn;
-   before every round, a "Round 2" plate and the street's name on a blade.
+   After a match, the standings board sits at the right until the next match starts (the jobs make way for it). The bottom
+   stays clear for the platform's Ready bar.
+3. **Countdown and round intro.** The platform's 3, 2, 1, with a clack each from the game, while the camera comes down to
+   your lawn; before every round after the first, the Gazette with "Round 2" and the street's name.
 4. **Play HUD** (first person):
    - **A number plate over every house**, in its owner's colour with its symbol, its number and the owner's name, pinned above
      the roof. A house off screen keeps its plate pinned to the nearest side edge (stacked), so every number is always
@@ -484,7 +479,7 @@ offset shadow as if mounted on a wall in a low sun. No dark boxes behind HUD ite
      break: "+8" (gold "+12" when hot). By your stones: three flames for the heat. At the left: the neighbours' tricks.
    - Hit: cracks grow in from the screen's edge on the side the stone came from.
    - The edge arrow pointing at whoever just broke your glass, for 1.5 s, and a white flash at the edges.
-   - Esc key hint, small, top right, while the mouse is locked; "Click" when it isn't.
+   - Esc key hint, small, top right, while the mouse is locked; "Click to aim" when it isn't.
    - On phones everything moves around `ow.ui.reserved` (the platform's menu, stick and buttons).
 5. **Out.** Your house goes dark, "Your house is out", then you're a ghost over the green; "Pebbles crack glass" once. Your
    plate becomes a ghost outline with pebbles.
@@ -496,9 +491,7 @@ offset shadow as if mounted on a wall in a low sun. No dark boxes behind HUD ite
    left: **the receipt**, the XP line by line with a tick each, the total, the level bar filling (a level up stamps "Level 7",
    a new rank, the looks it unlocked), the jobs done and the streak.
 8. **Watching** (latecomer): a ghost's view over the green; "Next round" (or "Next match" when every house has a person).
-9. **Esc card:** Resume (and Pause for a private server's host or a player alone). Solid plate in the street's colours, one
-   column of large buttons.
-10. **Room closed:** one message and one button (above).
+9. **Room closed:** one message and one button (above).
 
 ## Art direction
 
@@ -604,7 +597,7 @@ limiter, so a knockout over a shower of glass bends instead of clipping.
 | Store closes | Shop bell, door shut, neon buzz off; the wind rises |
 | A house falls | A cascade of shatters and a descending vibraphone motif |
 | Round win / match win | Vibraphone and muted brass stabs; a longer fanfare for the match |
-| UI | Plate clicks; the porch-light switch for Ready |
+| UI | Plate clicks; the porch-light switch when someone readies |
 | Heat | A rising chime per flame; at HOT a whump and a roar that settles into crackle; a hot stone roars past; heat lost hisses and falls |
 | Your break | A bright ding in the ear, higher the longer your streak |
 | Trick shot | A quick rising run (longer for more tricks); a golden pane rings coins |
@@ -689,9 +682,9 @@ street with pebbles. It is first person, in a sunlit mid-century street, not a 2
 | Late messages make pages disagree | Deterministic stones on the match clock, one page decides each house, a 400 ms correction window, predicted breaks put back if not confirmed |
 | A host reload or change mid-round | Everything the host decides is in host state; bots, specials and away houses resume from it; tested through a fake room |
 | Phone performance (glass, shards, shadows) | Instanced panes, shards and stones; static geometry merged per material (under 250 draw calls); env map baked once; no transmission; shadows and shard caps by quality; pause on hidden |
-| iOS Safari | WebGL2 with a WebGL1-safe material set, audio started by the Play tap, every optional API guarded, no per-frame allocations |
+| iOS Safari | WebGL2 with a WebGL1-safe material set, audio started by the first tap, every optional API guarded, no per-frame allocations |
 | Glass not reading as glass from far away | A drawn pane texture with streaks (works on low quality), glints from the baked sky, broken teeth that differ in shape, the house number as the truth |
-| Pointer lock refusals | The guide's rules: lock from a click in the world, Esc card with Resume, "Click" hint on a refusal, drag to look when locks keep failing |
+| Pointer lock refusals | The guide's rules: lock from a click in the world, no pause card, "Click to aim" hint when it isn't locked, drag to look when locks keep failing |
 | Too many rules | Every rule above shows itself in play (a cracked pane looks cracked, a closed store says CLOSED, a brick breaks three); hints teach only throw, repair and specials |
 
 ## How it's built
@@ -702,7 +695,7 @@ helpers); `"dir": "dist"`, `base: './'`.
 - Pure modules in `src/core` (no page, no three.js; tested in node): `config.js` (every number), `rng.js`, `streets.js` (the
   eight layouts), `physics.js` (stone paths, wind, intercepts, facade and body hits, the aim solver), `round.js` (a round:
   panes, throws, specials, repair, the store, ghosts, eliminations, ranking), `bots.js` (brains and personalities), `sim.js`
-  (a headless round: the title's attract round, autoplay and the balance tests), `sync.js` (one page's side of a round in a
+  (a headless round: autoplay and the balance tests), `sync.js` (one page's side of a round in a
   match: who decides what, presence, host state), `net.js` (checks on everything read from the network), `twists.js`
   (the Gazette's twists and the Daily Street of each day), `career.js` (tricks, XP, levels, ranks, looks, jobs, the Daily
   score), `progress.js` (the saved profile: stars, XP, looks, jobs, streak, badges).
@@ -714,7 +707,7 @@ helpers); `"dir": "dist"`, `base: './'`.
   (the HUD and screens), `feel.js` (stamps, numbers, edge cracks, the Gazette), `career-ui.js` (title career, Locker, receipt,
   Daily results), `thumbs.js` (the Locker's pictures), `words.js`, `input.js`, `audio.js`, `music.js`, `palette.js`,
   `poster.js`.
-- `src/main.js`: join first, the title, lobby and rounds, cameras, events into sound and shards, the HUD.
+- `src/main.js`: join first, the lobby and rounds, cameras, events into sound and shards, the HUD.
 - Static geometry is merged per material; panes, teeth, cracks, shards, stones, trails, arc dots and puffs are instanced, so a
   frame is about 80-110 draw calls with shadows (measured on high quality at 1280×720, first person and from above).
 - Tests (`npm test`, `node --test`): rules and scoring, physics, bots (legal, beatable, not useless), balance simulations,

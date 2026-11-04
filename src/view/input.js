@@ -74,7 +74,7 @@ export function createInput(canvas, opts = {}) {
       return;
     }
     if (!I.active) {
-      if ((code === 'Space' || code === 'Enter') && !e.repeat) opts.onConfirm?.(e);
+      if (code === 'Space' && !e.repeat) opts.onConfirm?.(e);
       return;
     }
     if (code === 'Space' || e.key === ' ') {

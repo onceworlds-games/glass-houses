@@ -16,7 +16,6 @@ export const JOIN = {
   maxPlayers: 6,
   minPlayers: 1,
   lobby: 'bar',
-  ownCountdown: true,
   settings: [
     { id: 'street', label: 'Street', options: STREETS.map((s, i) => ({ value: i + 1, label: s.name })), default: 1 },
     { id: 'rounds', label: 'Rounds', options: ROUND_OPTIONS, default: 3 },
@@ -81,7 +80,8 @@ export function createOnline(opts) {
     roundSeconds: ROUND_SECONDS,
     introSeconds: 3,
     roundEndSeconds: 6,
-    resultsSeconds: 20,
+    // The winner's house and your receipt for a moment; then the lobby with the standings and the platform's strip.
+    resultsSeconds: 5,
     points: POINTS,
     admit: 'round',
     startRound(m) {
@@ -222,7 +222,10 @@ export function createOnline(opts) {
           });
         }
       }
-      if (phase === 'lobby' && prev === 'results' && sync.isHost) tally.set({});
+      // The standings stay up in the lobby after a match: the tally starts over with the next one.
+      if (phase === 'countdown' && sync.isHost) tally.set({});
+      // Play begins as the platform's countdown ends: the Gazette's wait is for the rounds after the first.
+      if (phase === 'intro' && match.round === 1 && room.isHost) match.skip();
       opts.onPhase?.(phase, prev);
     }),
   );
@@ -266,20 +269,15 @@ export function createOnline(opts) {
     get solo() {
       return room.kind === 'solo';
     },
-    /** Lobby: the host picks a street or the rounds. Everyone readies again after a change. */
+    /** Lobby: the host picks a street or the rounds. The room asks everyone to ready again after a change. */
     setSetting(id, value) {
       if (!room.isHost || match.phase !== 'lobby') return false;
       if (room.settings?.[id] === value) return true;
       room.setSetting?.(id, value);
-      try {
-        if (room.kind !== 'solo') room.clearReady?.();
-      } catch {
-        /* nothing to clear */
-      }
       useStreetBots();
       return true;
     },
-    /** Lobby: ready (or a room of one: start). */
+    /** Local captures only (?autoplay=1): ready (or a room of one: start). Players use the platform's strip. */
     ready(on = true) {
       if (room.kind === 'solo') {
         match.ready(true);

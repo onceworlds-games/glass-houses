@@ -1,4 +1,4 @@
-// The page: joins the street's server as it loads, draws the title's live street, the lobby, the rounds in first person and the
+// The page: joins the street's server as it loads, draws the lobby, the rounds in first person and the
 // results, and turns what happens into sound, shards and shake. Store pictures (?poster=) go to poster.js instead.
 
 import './style.css';
@@ -21,7 +21,7 @@ import { startAudio, audioContext, sound, ambience, hush } from './view/audio.js
 import { music } from './view/music.js';
 import { OWNERS } from './view/palette.js';
 import { joinRoom, createOnline } from './online.js';
-import { createSimRound, lineupSeats } from './core/sim.js';
+import { lineupSeats } from './core/sim.js';
 import { createRound, glassCount, rankHouses } from './core/round.js';
 import { buildField, STREETS, STREET_COUNT } from './core/streets.js';
 import { tracePath, NO_WIND, handOf, velocityOf } from './core/physics.js';
@@ -95,16 +95,13 @@ async function boot() {
     }
   };
 
-  // The title's words and its door first; the street fills in behind them.
+  // The name and the career first; the street fills in behind them.
   let booted = false;
-  let wantPlay = false;
   const ui = createUI(uiRoot, {
-    onPlay: () => (booted ? pressPlay() : (wantPlay = true)),
-    onReady: () => readyUp(),
     onStreet: (i) => pickStreet(i),
     onRounds: (n) => online?.setSetting('rounds', n),
   });
-  ui.show('title');
+  ui.show('lobby');
   const feel = createFeel(uiRoot);
   const career = createCareerUI(uiRoot, ui.titleEl, {
     onLocker: () => booted && openLocker(),
@@ -113,7 +110,7 @@ async function boot() {
     onTry: (slot, id) => tryLook(slot, id),
     onLockerDone: () => closeLocker(),
     onDailyAgain: () => startDaily(),
-    onDailyBack: () => backToTitle(),
+    onDailyBack: () => backToLobby(),
     thumb: (key) => thumb(key),
     sound: { tick: (k) => sound.tick(k), till: () => sound.till(), levelUp: () => sound.levelUp() },
   });
@@ -153,13 +150,12 @@ async function boot() {
     .catch(() => {});
 
   // ------------------------------------------------------------------ state
-  let screen = 'title'; // title | game
+  let screen = 'game'; // game (the room: its lobby and its match) | daily | locker
   let online = null;
   let autoplay = false;
-  let autoplayTo = '';
   let menuOpen = false;
   let pausedByHide = false;
-  let pausedByMe = false;
+  let wasReady = false;
   let trauma = 0;
   // The trailer's cameras (local only): '', 'chase', 'orbit', 'weak' (the house with the least glass when it's picked) or
   // 'stone' (riding behind stones headed for glass).
@@ -180,7 +176,6 @@ async function boot() {
   let porchSig = '';
   let storeWasOpen = true;
   let lobby = { key: '', R: null };
-  let title = { R: null, seed: 11, ms: 0, endAt: 0, shot: -1, shotUntil: 0 };
   // The Daily Street (a round of your own against the neighbours, the same for everyone today) and the Locker.
   let daily = null;
   let locker = null;
@@ -229,15 +224,12 @@ async function boot() {
   };
   const input = createInput(canvas, {
     onConfirm: () => {
-      if (screen === 'title') pressPlay();
-      else if (screen === 'daily' && daily?.shown) startDaily();
-      else if (ui.screen === 'lobby' && showOwnReady()) readyUp();
+      if (screen === 'daily' && daily?.shown) startDaily();
     },
     blocked: (x, y) => reservedList().some((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h),
   });
   input.onEsc = () => {
-    if (screen === 'game' && online?.match.phase === 'round' && !ui.cardOpen) openPauseCard();
-    else if (screen === 'daily' && !ui.cardOpen) openDailyCard();
+    if (screen === 'daily' && !ui.cardOpen) openDailyCard();
     else if (screen === 'locker') closeLocker();
   };
 
@@ -246,12 +238,13 @@ async function boot() {
     ui.setReserved(reservedList(), window.innerWidth, window.innerHeight);
   }
   window.addEventListener('resize', resize);
-  // Sound starts with the first touch in the game, wherever it is.
-  window.addEventListener('pointerdown', () => {
-    if (screen !== 'game') return;
+  // Sound starts with the first touch or key in the game, wherever it is, and tries again as a match starts.
+  const startSound = () => {
     startAudio();
     music.start();
-  });
+  };
+  window.addEventListener('pointerdown', startSound);
+  window.addEventListener('keydown', startSound);
   resize();
 
   // ------------------------------------------------------------------ the platform
@@ -301,7 +294,7 @@ async function boot() {
     if (score > 0) ow?.leaderboards?.submit(board, score).catch(() => {});
   };
 
-  /** The title's career: level, streak, today's jobs, the Daily Street's door, the Locker's "New". */
+  /** The career around the lobby: level, streak, today's jobs, the Daily Street's door, the Locker's "New". */
   function refreshTitle() {
     const d = today();
     const D = dailyOf(d);
@@ -315,7 +308,7 @@ async function boot() {
       panesToday,
     });
   }
-  /** Panes the whole game broke today (once a minute, on the title). */
+  /** Panes the whole game broke today (once a minute, in the lobby). */
   function fetchCommunity(now) {
     if (now - panesAt < 60000 || !ow?.data?.game) return;
     panesAt = now;
@@ -341,7 +334,6 @@ async function boot() {
     }
     const devOK = LOCAL || ow?.mode === 'standalone';
     autoplay = devOK && params.get('autoplay') === '1';
-    autoplayTo = devOK ? params.get('autoplay-to') ?? '' : '';
     pickedOnce = false;
     online = createOnline({
       room,
@@ -352,17 +344,6 @@ async function boot() {
       onResults: (standings, mine) => matchOver(standings, mine),
       onClose: (reason) => closed(reason),
     });
-    if (screen === 'title') hideStrip(true);
-    if (autoplay || autoplayTo === 'lobby') pressPlay();
-  }
-
-  /** The platform's Ready strip has no place on the title. */
-  function hideStrip(on) {
-    try {
-      online?.room.hideLobby?.(on);
-    } catch {
-      /* fine */
-    }
   }
 
   function closed(reason) {
@@ -383,18 +364,6 @@ async function boot() {
 
   joining.then((room) => attach(room));
 
-  // ------------------------------------------------------------------ title → lobby
-  function pressPlay() {
-    if (screen !== 'title') return;
-    startAudio();
-    music.start();
-    music.set('menu');
-    sound.click();
-    screen = 'game';
-    hideStrip(false);
-    W.sweep();
-  }
-
   const lobbyPlayers = () => {
     const m = online?.match;
     if (!m) return [];
@@ -405,14 +374,6 @@ async function boot() {
     }
   };
   const alone = () => lobbyPlayers().length <= 1;
-  const showOwnReady = () => ow?.mode !== 'platform';
-
-  function readyUp() {
-    if (!online || online.match.phase !== 'lobby') return;
-    sound.click();
-    const me = lobbyPlayers().find((p) => p.me);
-    online.ready(!(me?.ready ?? false) || online.room.kind === 'solo');
-  }
 
   function pickStreet(i) {
     if (!online) return;
@@ -425,7 +386,7 @@ async function boot() {
     }
   }
 
-  // ------------------------------------------------------------------ what the street shows: the title's round, the lobby, a round
+  // ------------------------------------------------------------------ what the street shows: the lobby, a round
   let showing = '';
   function show(kind, setup) {
     if (showing === kind) return;
@@ -485,7 +446,6 @@ async function boot() {
     looksSig = sig;
     W.setLooks(list);
   }
-  const personaLooks = (personas) => personas.map((p, i) => (p === 'player' ? null : PERSONA_LOOKS[p] ?? null));
 
   function phaseChanged(phase, prev) {
     if (prev === 'round' && phase !== 'round') {
@@ -505,6 +465,13 @@ async function boot() {
       }
     }
     if (prev === 'lobby' || (prev === 'countdown' && phase !== 'lobby')) matchStars = 0;
+    if (phase === 'countdown') startSound();
+    // The platform's Ready gave this frame its click: close any menu and take the mouse as play begins.
+    if (prev === 'countdown' && phase !== 'lobby' && !autoplay) {
+      menuOpen = false;
+      ui.card(null);
+      if (!input.touch) input.requestLock();
+    }
   }
 
   function roundOver() {
@@ -591,48 +558,6 @@ async function boot() {
     else sound.lose();
   }
 
-  // ------------------------------------------------------------------ the pause card
-  function openPauseCard() {
-    if (!online) return;
-    const room = online.room;
-    const canPause = (room.kind === 'private' && room.isHost) || room.kind === 'solo';
-    const buttons = [{ label: 'Resume', main: true, on: resume }];
-    if (canPause && !online.match.paused) {
-      buttons.push({
-        label: 'Pause',
-        on: () => {
-          try {
-            room.pauseMatch(true);
-            pausedByMe = true;
-          } catch {
-            /* the room says no */
-          }
-          ui.card({ msg: 'Paused', buttons: [{ label: 'Resume', main: true, on: resume }] });
-        },
-      });
-    }
-    input.setActive(false);
-    ui.card({ msg: '', buttons });
-  }
-
-  function resume() {
-    ui.card(null);
-    if ((pausedByMe || pausedByHide) && online) {
-      try {
-        online.room.pauseMatch(false);
-      } catch {
-        /* fine */
-      }
-    }
-    pausedByMe = false;
-    pausedByHide = false;
-    sound.click();
-    if (online?.match.phase === 'round' && !autoplay) {
-      input.setActive(true);
-      input.requestLock();
-    }
-  }
-
   document.addEventListener('visibilitychange', () => {
     const ctx = audioContext();
     if (document.hidden) {
@@ -649,7 +574,15 @@ async function boot() {
       }
     } else {
       ctx?.resume?.().catch?.(() => {});
-      if (pausedByHide) openPauseCard();
+      // A round of one that stopped while the page was hidden goes on by itself.
+      if (pausedByHide) {
+        pausedByHide = false;
+        try {
+          online?.room.pauseMatch(false);
+        } catch {
+          /* fine */
+        }
+      }
     }
   });
 
@@ -672,9 +605,9 @@ async function boot() {
     return proj.on ? { x: proj.x, y: proj.y } : null;
   }
 
-  function onEvent(e, R, me, isTitle) {
+  function onEvent(e, R, me, isLocker) {
     const nowP = performance.now();
-    const mineOn = !isTitle && me >= 0;
+    const mineOn = !isLocker && me >= 0;
     switch (e.type) {
       case 'throw': {
         if (e.seat === me) {
@@ -683,7 +616,7 @@ async function boot() {
           sound.throw(pw);
           if (e.hot) sound.roar(0, 0);
           // The lens kicks out with the arm.
-          if (!isTitle && !reduced()) fovKick = Math.min(9, fovKick + 1.5 + pw * 2.5 + (e.hot ? 3 : 0));
+          if (!isLocker && !reduced()) fovKick = Math.min(9, fovKick + 1.5 + pw * 2.5 + (e.hot ? 3 : 0));
         } else {
           const s = spatial(e.x, e.y, e.z);
           const st = R.stones.find((x) => x.id === e.id);
@@ -727,7 +660,7 @@ async function boot() {
           sound.crack(s.d, s.pan);
           if (mineOn && e.by === me && e.house !== me) feel.confirm(false, reduced());
         }
-        if (e.house === me && me >= 0 && e.panes?.length && !isTitle) hitMe(e.by, e.panes.length, R, me);
+        if (e.house === me && me >= 0 && e.panes?.length && !isLocker) hitMe(e.by, e.panes.length, R, me);
         break;
       }
       case 'crack': {
@@ -769,7 +702,7 @@ async function boot() {
         const s = spatial(e.x, e.y, e.z);
         sound.bonk(s.d, s.pan, e.seat === me);
         W.fx.glint(e.x, e.y, e.z, 1.3);
-        if (e.seat === me && !isTitle) {
+        if (e.seat === me && !isLocker) {
           trauma = Math.min(1, trauma + 0.6);
           if (e.by >= 0) feel.hurt(bearing(R, e.by), 2, reduced());
         }
@@ -798,7 +731,7 @@ async function boot() {
           W.fx.gold(e.x, e.y, e.z);
           if (e.seat === me) sound.coin();
         }
-        if (isTitle) break;
+        if (isLocker) break;
         const shown = e.ids.filter((id) => id !== 'ko');
         if (!shown.length) break;
         if (e.seat === me) {
@@ -816,10 +749,8 @@ async function boot() {
         const by = e.by;
         const ko = by >= 0 && by !== e.house;
         if (ko) W.fx.knockout(h.cx + h.fx * 1.2, h.elev + 2.6, h.cz + h.fz * 1.2, OWNERS[by % OWNERS.length].color);
-        if (isTitle) {
-          title.shot = e.house;
-          title.shotUntil = performance.now() + 3600;
-        } else if (e.house === me) {
+        if (isLocker) break;
+        if (e.house === me) {
           outBannerUntil = performance.now() + 2600;
           ghostHintAt = performance.now() + 2800;
           trauma = Math.min(1, trauma + 0.5);
@@ -850,7 +781,7 @@ async function boot() {
       }
       case 'hail': {
         const secs = Math.max(0.5, (e.at - R.now) / 1000);
-        if (!isTitle) {
+        if (!isLocker) {
           feel.warn('Hail!', 2200, nowP);
           sound.hail(Math.min(4.5, secs + 1.8));
         }
@@ -872,7 +803,7 @@ async function boot() {
           if (list.length) sound.shatter(s.d, s.pan, e.house === me, list.length);
           else sound.crack(s.d, s.pan);
         }
-        if (e.house === me && list.length && !isTitle) hitMe(-1, list.length, R, me);
+        if (e.house === me && list.length && !isLocker) hitMe(-1, list.length, R, me);
         break;
       }
       case 'glaze': {
@@ -888,14 +819,14 @@ async function boot() {
         W.fx.glint(paneTmp.x, paneTmp.y, paneTmp.z, 1);
         break;
       case 'grab':
-        if (e.seat === me && !isTitle) {
+        if (e.seat === me && !isLocker) {
           sound.grab(e.kind);
           once(e.kind === 'brick' ? 'brick' : 'gnome', e.kind === 'brick' ? 'Brick: breaks 3' : 'Gnome: breaks 2', 2400);
         } else W.fx.dust(e.x, R.field.groundY(e.x, e.z) + 0.2, e.z, 4, '#E8DCC8');
         break;
       case 'special':
         W.fx.dust(e.x, R.field.groundY(e.x, e.z) + 0.2, e.z, 6, '#E8DCC8');
-        if (!isTitle && me >= 0 && (e.a === me || e.b === me) && !R.bodies[me].ghost) once('grab', 'Grab it!', 2200);
+        if (!isLocker && me >= 0 && (e.a === me || e.b === me) && !R.bodies[me].ghost) once('grab', 'Grab it!', 2200);
         break;
       case 'fizzle':
         W.fx.dust(e.x, R.field.groundY(e.x, e.z) + 0.2, e.z, 6, '#E8DCC8');
@@ -933,39 +864,6 @@ async function boot() {
     once('keep', 'Keep yours', 1600);
   }
 
-  // ------------------------------------------------------------------ the title's live street
-  function newTitleRound() {
-    title.seed = (title.seed * 48271 + 7) % 2147483647;
-    title.R = createSimRound(0, title.seed, { personas: ['walt', 'ray', 'rosa', 'bev', 'twins', 'chad'], round: 2 });
-    // Start where the stones are already flying.
-    const R = title.R;
-    while (R.now < 9000) R.stepTick();
-    R.events.length = 0;
-    title.ms = R.now;
-    title.endAt = 0;
-    title.shot = -1;
-  }
-
-  function stepTitle(dt) {
-    if (!title.R || (title.endAt && performance.now() > title.endAt)) newTitleRound();
-    const R = title.R;
-    show(`title:${title.seed}`, () => {
-      W.setStreet(0);
-      W.sweep();
-      const personas = R.seats.map((s) => s.persona);
-      W.cast(personas);
-      useLooks(personaLooks(personas));
-      fx0();
-    });
-    title.ms += dt * 1000;
-    R.advanceTo(title.ms);
-    if (!title.endAt && (R.alive() <= 1 || R.now > ROUND_MS - 1000)) {
-      R.over = true;
-      title.endAt = performance.now() + 4500;
-    }
-    return R;
-  }
-
   // ------------------------------------------------------------------ the lobby's street
   function lobbyRound() {
     const street = online ? online.street : 0;
@@ -997,9 +895,8 @@ async function boot() {
   const DAILY_RESULTS_MS = 2600;
 
   function startDaily(dayOverride) {
-    if (screen !== 'title' && screen !== 'daily') return;
-    startAudio();
-    music.start();
+    if (screen !== 'game' && screen !== 'daily') return;
+    startSound();
     sound.paper();
     const d = Number.isInteger(dayOverride) ? dayOverride : today();
     const D = dailyOf(d);
@@ -1016,7 +913,6 @@ async function boot() {
     });
     daily = { d, D, R, ms: 0, phase: 'intro', t0: last, endAt: 0, shown: false, res: null, paused: false, wall: null, plays: 0 };
     screen = 'daily';
-    hideStrip(true);
     career.xp(null);
     career.daily(null);
     ui.card(null);
@@ -1141,9 +1037,9 @@ async function boot() {
     });
   }
 
-  function backToTitle() {
+  function backToLobby() {
     sound.click();
-    screen = 'title';
+    screen = 'game';
     daily = null;
     locker = null;
     career.xp(null);
@@ -1153,17 +1049,15 @@ async function boot() {
     feel.clear();
     fx0();
     showing = '';
-    hideStrip(true);
     music.set('menu');
     refreshTitle();
   }
 
   // ------------------------------------------------------------------ the Locker: try looks on on your own house
   function openLocker() {
-    if (screen !== 'title') return;
-    startAudio();
+    if (screen !== 'game') return;
     // The menu tune plays while you try things on.
-    music.start();
+    startSound();
     music.set('menu');
     sound.click();
     const seats = lineupSeats(0);
@@ -1178,7 +1072,7 @@ async function boot() {
     // Everything new has been seen now.
     profile.seen = [...new Set([...profile.seen, ...unseenLooks(profile)])];
     saveProfile();
-    backToTitle();
+    backToLobby();
   }
 
   function tryLook(slot, id) {
@@ -1369,7 +1263,9 @@ async function boot() {
     const portrait = stage.height > stage.width;
     const back = portrait ? 1.45 : 1.25;
     tv.set(Math.cos(a) * f.R * back, f.R * (portrait ? 1.85 : 1.5), Math.sin(a) * f.R * back);
-    tl.set(-Math.cos(a) * f.R * 0.12, 0, -Math.sin(a) * f.R * 0.12);
+    // Upright, the career and the doors take the lower half: the street sits above them.
+    const across = portrait && stage.width <= 860 ? -0.42 : 0.12;
+    tl.set(-Math.cos(a) * f.R * across, 0, -Math.sin(a) * f.R * across);
     lookAtSmooth(tv, tl, dt, 2);
   }
 
@@ -1531,17 +1427,17 @@ async function boot() {
     const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
     last = now;
     const match = online?.match ?? null;
-    // Readied from the platform's own strip (or a match this page is part of began): straight in from the title.
-    if (screen === 'title' && match && match.phase !== 'lobby' && match.phase !== 'results' && (match.me || online.room.me?.ready)) pressPlay();
-    const isTitle = screen === 'title';
+    // Readied on the platform's strip, or a match this page is part of began: the Daily Street and the Locker close by themselves.
+    const ready = !!online?.room.me?.ready;
+    if (screen !== 'game' && match && ((ready && !wasReady) || (match.me && match.phase !== 'lobby' && match.phase !== 'results'))) backToLobby();
+    wasReady = ready;
     const isDaily = screen === 'daily' && !!daily;
     const isLocker = screen === 'locker' && !!locker;
     let phase;
-    if (isTitle) phase = 'title';
-    else if (isLocker) phase = 'locker';
+    if (isLocker) phase = 'locker';
     else if (isDaily) phase = daily.phase === 'end' ? 'roundEnd' : daily.phase;
     else phase = match?.phase ?? 'lobby';
-    const flow = isDaily ? `daily-${daily.phase}` : phase === 'title' || phase === 'locker' ? phase : phase === 'lobby' || phase === 'countdown' || phase === 'roundEnd' || phase === 'results' ? phase : 'playing';
+    const flow = isDaily ? `daily-${daily.phase}` : phase === 'locker' ? phase : phase === 'lobby' || phase === 'countdown' || phase === 'roundEnd' || phase === 'results' ? phase : 'playing';
     if (flow !== lastFlow) {
       lastFlow = flow;
       document.body.dataset.flow = flow;
@@ -1550,8 +1446,7 @@ async function boot() {
     const live = screen === 'game' && sync?.R && (phase === 'intro' || phase === 'round' || phase === 'roundEnd' || phase === 'results');
     let R;
     let me = -1;
-    if (isTitle) R = stepTitle(dt);
-    else if (isLocker) R = stepLocker(dt, now);
+    if (isLocker) R = stepLocker(dt, now);
     else if (isDaily) {
       R = stepDaily(dt, now);
       me = 0;
@@ -1563,7 +1458,7 @@ async function boot() {
     } else R = lobbyRound();
 
     // This player's hands on their body, then the round runs to the match clock.
-    const playing = phase === 'round' && me >= 0 && (isDaily || (!isTitle && R === sync?.R));
+    const playing = phase === 'round' && me >= 0 && (isDaily || R === sync?.R);
     const paused = isDaily ? daily.paused : !!match?.paused;
     const auto = autoplay || (isDaily && dailyAuto);
     const active = playing && !auto && !ui.cardOpen && !menuOpen && !paused;
@@ -1575,17 +1470,14 @@ async function boot() {
     } catch (err) {
       console.error('[glass-houses] frame', err);
     }
-    // Events of a round nobody draws (still on the title) aren't kept.
+    // Events of a round nobody draws (on the Daily Street or in the Locker) aren't kept.
     if (sync?.R && sync.R !== R) sync.R.events.length = 0;
 
     // Camera.
     const mine = me >= 0 ? R.bodies[me] : null;
     const cam = camOverride;
     let firstP = false;
-    if (isTitle) {
-      if (title.shot >= 0 && now < title.shotUntil) houseShot(R, title.shot, now, dt, 1 - (title.shotUntil - now) / 3600);
-      else orbit(R, now, dt);
-    } else if (isLocker) lockerCam(R, now, dt);
+    if (isLocker) lockerCam(R, now, dt);
     else if (phase === 'lobby') lobbyCam(R, now, dt, lobbyMe());
     else if (phase === 'countdown' || (isDaily && phase === 'intro')) {
       // Down from above onto your lawn.
@@ -1633,7 +1525,7 @@ async function boot() {
     camRight.set(Math.cos(camera.rotation.y), 0, -Math.sin(camera.rotation.y));
 
     // The street.
-    for (const e of R.events) onEvent(e, R, me, isTitle || isLocker);
+    for (const e of R.events) onEvent(e, R, me, isLocker);
     R.events.length = 0;
     if (hailUntil && now > hailUntil) {
       hailUntil = 0;
@@ -1646,7 +1538,7 @@ async function boot() {
     // A knockout of yours: what's in the air hangs for a moment.
     const viewDt = now < slowUntil ? dt * 0.3 : dt;
     W.draw(R, viewDt, now, wind);
-    if (!isTitle && phase === 'lobby') {
+    if (phase === 'lobby') {
       const players = lobbyPlayers();
       let sig = '';
       for (let i = 0; i < SEATS; i++) {
@@ -1698,8 +1590,8 @@ async function boot() {
         sound.squeak(0);
       }
     } else sound.windup(0);
-    ambience(wind.s, dt, { night: STREETS[W.index]?.light === 'night', snow: snowy(), quiet: isTitle || isLocker });
-    if (!isTitle && !isLocker) {
+    ambience(wind.s, dt, { night: STREETS[W.index]?.light === 'night', snow: snowy(), quiet: isLocker });
+    if (!isLocker) {
       // After a round the band keeps playing, a little softer, under the receipt.
       let mode = phase === 'roundEnd' || phase === 'results' ? 'results' : 'menu';
       if (phase === 'round' || phase === 'intro') {
@@ -1792,13 +1684,6 @@ async function boot() {
   function hud(R, me, phase, match, now, firstP) {
     ui.tick(now);
     feel.tick(now);
-    if (screen === 'title') {
-      ui.show('title');
-      ui.banner('', null);
-      ui.standings(null);
-      fetchCommunity(now);
-      return;
-    }
     if (screen === 'locker') {
       ui.show('none');
       ui.banner('', null);
@@ -1838,6 +1723,7 @@ async function boot() {
 
     if (phase === 'lobby') {
       ui.show('lobby');
+      fetchCommunity(now);
       const players = lobbyPlayers();
       const street = online.street;
       const signs = [];
@@ -1852,7 +1738,6 @@ async function boot() {
           visible: lp.on && lp.x > 30 && lp.x < stage.width - 30 && lp.y > 60 && lp.y < stage.height - 40,
           name: p ? p.name : PERSONAS[STREETS[street].lineup[i - players.length]]?.name ?? '',
           owner: i,
-          ready: !!p?.ready,
           you: !!p?.me,
           host: !!p?.host && room.kind !== 'public',
         });
@@ -1864,8 +1749,7 @@ async function boot() {
         pick: online.isHost,
         stars: profile.stars,
         rounds: online.rounds,
-        go: showOwnReady(),
-        goLabel: players.find((p) => p.me)?.ready && room.kind !== 'solo' ? 'Not ready' : 'Ready',
+        results: !!results,
         signs,
       });
       ui.banner('', null);
@@ -1892,7 +1776,8 @@ async function boot() {
         lastCount = n;
         sound.count(n);
       }
-      ui.banner(`cd${n}`, [{ t: String(n), size: 'big', drop: true }]);
+      // The platform draws the 3-2-1; the clack on each number is ours.
+      ui.banner('', null);
       return;
     }
     lastCount = -1;
@@ -1922,8 +1807,8 @@ async function boot() {
     }
     // Intro and round.
     ui.show('play');
-    // Before every round of a match, the Gazette with the twist to come (every page draws the same one).
-    if (phase === 'intro') frontPage(online.twistAhead(), `Round ${match.round} · ${STREETS[online.street]?.name ?? ''}`);
+    // Before every round after the first (play begins at once in that one), the Gazette with the twist to come: every page draws the same.
+    if (phase === 'intro' && match.round > 1) frontPage(online.twistAhead(), `Round ${match.round} · ${STREETS[online.street]?.name ?? ''}`);
     if (!sync.R || R !== sync.R) return;
     playHud(R, me, phase, now, firstP, sync.data.street, match.round);
     if (!b0(R, me)) {
@@ -1977,7 +1862,7 @@ async function boot() {
       msg: 'Paused',
       buttons: [
         { label: 'Resume', main: true, on: () => dailyResume() },
-        { label: 'Leave', on: () => backToTitle() },
+        { label: 'Leave', on: () => backToLobby() },
       ],
     });
   }
@@ -2026,7 +1911,7 @@ async function boot() {
     ui.reticle(firstP && !!b);
     const touch = input.touch || !!ow?.controls?.touch;
     const active = phase === 'round' && b && !autoplay && !(screen === 'daily' && dailyAuto);
-    ui.keyhint(active && !touch && !ui.cardOpen ? (input.locked ? 'Esc' : input.lockFailed ? null : 'Click') : null);
+    ui.keyhint(active && !touch && !ui.cardOpen ? (input.locked ? 'Esc' : input.lockFailed ? null : 'Click to aim') : null);
 
     // The Gazette before the round: its twist, the street and the round. Then the twist pinned under the wind.
     // (A match's intro shows its Gazette from hud(): the round's data isn't there yet.)
@@ -2104,10 +1989,10 @@ async function boot() {
       get daily() {
         return daily;
       },
-      /** A fresh Daily Street (from the title or over the one running); `day`: another day's. */
+      /** A fresh Daily Street (from the lobby or over the one running); `day`: another day's. */
       playDaily(day) {
         if (screen === 'daily') {
-          screen = 'title';
+          screen = 'game';
           daily = null;
         }
         startDaily(day);
@@ -2139,7 +2024,6 @@ async function boot() {
 
   refreshTitle();
   booted = true;
-  if (wantPlay) pressPlay();
-  else if ((LOCAL || ow?.mode === 'standalone') && params.get('daily')) startDaily();
+  if ((LOCAL || ow?.mode === 'standalone') && params.get('daily')) startDaily();
   requestAnimationFrame(frame);
 }
